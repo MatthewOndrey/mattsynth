@@ -397,7 +397,6 @@ button.onhold { background:#2f6b3a !important; color:#fff !important; }
 .rlab.tap.up { background:var(--hot); color:#3e2723; }
 #ctl { display:flex; gap:6px; align-items:center; }
 #hdr #ctl button { font-size:12px; padding:4px 10px; border-radius:7px; }
-#ctl button { background:var(--panel); color:var(--ink); border:1px solid var(--line);
 #ctl button { flex:1; background:var(--panel); color:var(--ink); border:1px solid var(--line);
               border-radius:10px; padding:13px 0; font-size:16px; }
 #ctl button.on { background:var(--acc); border-color:var(--acc); }
@@ -3929,8 +3928,8 @@ function hexGrid(container){
        folds away, and reading it in the same tick measures the old layout */
     const availW = v.clientWidth || window.innerWidth;
     const top = grid.getBoundingClientRect().top;
-    const ctl = document.getElementById("ctl");
-    const bottom = ctl ? ctl.getBoundingClientRect().top : window.innerHeight;
+    /* the octave strip lives in the header now, so the floor is the view itself */
+    const bottom = v.getBoundingClientRect().bottom || window.innerHeight;
     const availH = Math.max(220, bottom - top - 6);
     const RUNS = 11;
     const wantCols = micro.size === "small" ? 28.5 : 16.5;
@@ -3942,7 +3941,11 @@ function hexGrid(container){
     const ROWS = Math.max(6, Math.floor((availH - h) / vpitch) + 1);
     const COLS = Math.max(8, Math.floor((availW - w / 2) / w));
     const gridH = Math.round((ROWS - 1) * vpitch + h);
+    /* the keys are absolute, so the grid has no intrinsic width: give it one or the
+       board collapses to a single clipped column */
     grid.style.height = gridH + "px";
+    grid.style.width = Math.round(COLS * w + w / 2) + "px";
+    grid.style.position = "relative";
     grid.style.marginTop = "0px";
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
