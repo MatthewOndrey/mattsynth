@@ -1,0 +1,39 @@
+=== panel-ui
+[Unit]
+Description=Daisy Pod touch panel (Pi)
+After=network.target podbridge.service
+[Service]
+ExecStart=/usr/bin/python3 /home/matto/panel_ui.py
+Restart=always
+RestartSec=2
+User=matto
+[Install]
+WantedBy=multi-user.target
+=== kiosk
+[Unit]
+Description=Daisy panel kiosk
+After=graphical.target network-online.target
+Wants=network-online.target
+[Service]
+User=matto
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/bin/chromium --ozone-platform=wayland --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-features=CalculateNativeWinOcclusion --kiosk --disable-pinch --overscroll-history-navigation=0 --noerrdialogs --disable-infobars --disable-session-crashed-bubble --remote-debugging-port=9333 --remote-allow-origins=* --user-data-dir=/home/matto/.config/daisy-kiosk http://127.0.0.1:8080/
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=graphical.target
+=== podbridge
+[Unit]
+Description=Pod <-> panel serial bridge
+After=network.target
+[Service]
+ExecStart=/usr/bin/python3 /home/matto/podbridge.py
+Restart=always
+RestartSec=2
+User=matto
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target

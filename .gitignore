@@ -1,0 +1,12 @@
+build/
+vendor/
+*.bin
+*.elf
+*.map
+*.o
+*.syx
+*.wt
+*.mid
+panel_state.json
+__pycache__/
+*.pyc
