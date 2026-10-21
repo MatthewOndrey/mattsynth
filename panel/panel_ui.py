@@ -4135,8 +4135,13 @@ function paintBend(){ if(bendBtn) bendBtn.textContent = "BEND " + (bendMode ? "o
 bendBtn.onclick = ()=>{ bendMode = !bendMode; paintBend(); saveState(); };
 paintBend();
 
-document.getElementById("partA").onclick = ()=> setPart(0);
-document.getElementById("partB").onclick = ()=> setPart(1);
+/* the header A/B buttons became the slot chips; keep these guarded so an older
+   or newer header can never abort the whole script again */
+(function(){
+  const a = document.getElementById("partA"), b = document.getElementById("partB");
+  if(a) a.onclick = ()=> setPart(0);
+  if(b) b.onclick = ()=> setPart(1);
+})();
 
 document.getElementById("gmode").onclick = ()=>{
   transport.global = !transport.global;
@@ -4299,8 +4304,8 @@ for(let i=1;i<=32;i++){
 algSel.value = 0;
 algSel.onchange = ()=> send("P 3 " + algSel.value);
 
-const slotName = ["init", "init"];
-let wtFiles = [];
+var slotName = ["init", "init"];
+var wtFiles = [];
 function paintSlots(){
   [0, 1].forEach(p=>{
     const b = document.getElementById(p ? "slotB" : "slotA");
@@ -4638,8 +4643,9 @@ function applyState(s){
 
   /* the Pod has its own copy of the sound settings, so push them back to it */
   setTimeout(()=>{
-    document.getElementById("partA").classList.toggle("on", part === 0);
-    document.getElementById("partB").classList.toggle("on", part === 1);
+    const pa = document.getElementById("partA"), pb = document.getElementById("partB");
+    if(pa) pa.classList.toggle("on", part === 0);
+    if(pb) pb.classList.toggle("on", part === 1);
     Object.keys(s.fx || {}).forEach(k=>send("P " + k + " " + s.fx[k]));
     send("P 12 " + bpm);
     /* the Pod boots on its own patch; re-send the saved slot so the name in
