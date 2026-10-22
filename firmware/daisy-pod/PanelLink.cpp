@@ -237,12 +237,13 @@ static void build_bank()
     add_patch("BELL", 4, 3, o);
     {
         fm::Patch& pb = bank[bank_size - 1];
-        /* pitch envelope: start ~2 semitones up and settle, the mallet bounce */
+        /* pitch envelope is flat by default: a held note must not drift down.
+           The OPS page can still dial one in when a sound wants the bounce. */
         pb.pitch_rate[0]  = 99;
         pb.pitch_rate[1]  = 34;
         pb.pitch_rate[2]  = 20;
         pb.pitch_rate[3]  = 20;
-        pb.pitch_level[0] = 96;
+        pb.pitch_level[0] = 50;
         pb.pitch_level[1] = 50;
         pb.pitch_level[2] = 50;
         pb.pitch_level[3] = 50;
