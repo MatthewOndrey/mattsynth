@@ -4130,7 +4130,7 @@ function hexGrid(container){
             /* back on the Wolf, as asked. Its bass stretches pitch, so the row is a
                near chromatic approximation rather than exact; the offset below was
                measured against the board. */
-            const shift = (typeof micro.bassShift === "number" ? micro.bassShift : -6);
+            const shift = -8;   /* E on the row lands on E, measured against the board */
             fNote = Math.max(12, Math.min(120, want + shift));
             fLab = NOTE[(want % 12 + 12) % 12];
           }
