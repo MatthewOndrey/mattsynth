@@ -3723,7 +3723,8 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
     const vel = Math.round(36 + y * 91);
     /* the split applies to the fingers, not just to files */
     const zn = +d.dataset.zone || 0;
-    const liveP = zn ? zn : (micro.splitOn ? ((note < (micro.split|0)) ? 1 : 0) : part);
+    const liveP = d.dataset.part !== undefined ? (+d.dataset.part)
+               : (zn ? zn : (micro.splitOn ? ((note < (micro.split|0)) ? 1 : 0) : part));
     fingers.set(ev.pointerId, {notes:[note], micro:[off], el:d, y:y, x:0, bx:ev.clientX,
       cents:0, sent:0, target:0, origin:note, hover:null, hoverAt:0, locked:false,
       lockCents:null, chording:false});
@@ -4121,14 +4122,21 @@ function hexGrid(container){
             /* the rest of the bottom row is the bass, plain chromatic semitones */
             /* the Wolf's bass sits six semitones above the note it is sent, measured
                against the board, so compensate and keep the label honest */
-            const want = 28 + (c - DRUMS.length);
+            const want = 40 + (c - DRUMS.length);   /* the Wolf will not speak below E2 */
             zone = 3;
-            fNote = Math.max(12, Math.min(108, want + (typeof micro.bassShift === "number" ? micro.bassShift : -6)));
+            /* the Wolf's bass tracks pitch badly: measured, note 28 sounds as 34 and 34
+               sounds as 42, so it is not an offset but a scale of four thirds. Invert
+               that so the key's label is the pitch you actually hear. */
+            /* the Wolf cannot play a chromatic scale: measured, it stretches pitch by
+               four thirds, so adjacent semitones collapse onto the same note. The bass
+               row therefore plays the Pod, which is exact, and the Wolf keeps the drums. */
+            fNote = Math.max(12, Math.min(120, want));
             fLab = NOTE[(want % 12 + 12) % 12];
           }
         }
         const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone ? 0 : null));
         k.dataset.zone = zone;
+        if(zone === 3) k.dataset.part = "1";
         k.style.width = w + "px";
         k.style.height = h + "px";
         k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
@@ -4981,6 +4989,7 @@ addEventListener("resize", fitHdr);
 
 function bootUI(){
   paintSlots();
+  setTimeout(function(){ try{ send("R"); }catch(e){} }, 1200);   /* never inherit a hung note */
   fitHdr();
   /* a reload forgets which notes this page was holding, so clear the Pod first
      or they hang until their release tail runs out */
