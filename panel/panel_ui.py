@@ -254,7 +254,7 @@ body.fxoff #fx { display:none; }
 #chroma .pad { min-width:0; padding:0 2px; }
 .pad.up { background:var(--hot); color:#3e2723; }
 #seq { display:flex; flex-direction:column; gap:8px; height:100%; }
-.seqbar { display:flex; gap:10px; align-items:center; }
+.seqbar { flex-wrap: nowrap; gap: 4px; display:flex; gap:10px; align-items:center; }
 .seqbar button { background:var(--panel); color:var(--ink); border:1px solid var(--line);
                  border-radius:9px; padding:10px 18px; font-size:16px; }
 .seqbar button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
@@ -462,7 +462,14 @@ button.onhold { background:#2f6b3a !important; color:#fff !important; }
 .fxrow { margin-bottom:8px; }
 .gmrow { display:flex; align-items:center; gap:10px; }
 .gmrow label { flex:1; }
-.pbtn.small { padding:7px 14px; font-size:15px; }
+.pbtn.small { padding:6px 8px; font-size:14px; width:44px; min-width:44px; text-align:center; }
+#midipart { width:118px; min-width:118px; }
+#ksplit   { width:74px;  min-width:74px; }
+#dragmode { width:44px;  min-width:44px; }
+#gplay    { width:74px;  min-width:74px; }
+#hload    { width:64px;  min-width:64px; }
+#bpm      { width:56px; }
+#splitlab { display:inline-block; width:86px; text-align:center; font-size:12px; }
 .fxrow label { display:flex; justify-content:space-between; font-size:15px; color:var(--dim);
                margin-bottom:3px; }
 .fxrow label b { color:var(--ink); font-weight:500; }
@@ -2663,7 +2670,7 @@ function buildWt(){
   files.className = "seqbar";
   const fsel = document.createElement("select"); fsel.id = "wtsel"; fsel.className = "pbtn";
   fsel.style.minWidth = "220px";
-  const fload = document.createElement("button"); fload.className = "pbtn small"; fload.textContent = "LOAD WAVES";
+  const fload = document.createElement("button"); fload.className = "pbtn small"; fload.textContent = "⤓"; fload.title = "load wave set";
   const fmsg = document.createElement("span"); fmsg.className = "lab"; fmsg.id = "wtmsg";
   fmsg.textContent = wtFile ? wtFile : "built-in additive frames";
   fload.onclick = async ()=>{
@@ -3675,7 +3682,7 @@ function buildMicro(){
   const sel = document.createElement("select"); sel.id = "midisel"; sel.className = "pbtn";
   sel.style.minWidth = "230px";
   sel.onchange = ()=>{ if(midi.playing) midiStop(); };
-  const ld = document.createElement("button"); ld.textContent = "LOAD";
+  const ld = document.createElement("button"); ld.id = "midiload"; ld.className = "pbtn small"; ld.textContent = "⤓"; ld.title = "load midi file";
   if(sel){
     sel.addEventListener("mousedown", ()=> refreshMidiLists());
     sel.addEventListener("focus", ()=> refreshMidiLists());
@@ -3697,21 +3704,21 @@ function buildMicro(){
       paintMidi();
     }).catch(()=>{});
   };
-  const pl = document.createElement("button"); pl.id = "midiplay"; pl.textContent = "PLAY";
+  const pl = document.createElement("button"); pl.id = "midiplay"; pl.className = "pbtn small"; pl.textContent = "▶"; pl.title = "play or stop the file";
   pl.onclick = ()=> midi.playing ? midiStop() : midiPlay();
   const pm = document.createElement("button"); pm.id = "midipart";
   pm.onclick = midiPartCycle;
-  const lp = document.createElement("button"); lp.id = "midiloop"; lp.textContent = "LOOP";
+  const lp = document.createElement("button"); lp.id = "midiloop"; lp.className = "pbtn small"; lp.textContent = "⟲"; lp.title = "loop the file";
   lp.onclick = ()=>{ midi.loop = !midi.loop; paintMidi(); };
   lp.classList.toggle("on", !!midi.loop);
   const st = document.createElement("span"); st.className = "lab"; st.id = "midistat";
   const drg = document.createElement("button"); drg.className = "pbtn small"; drg.id = "dragmode";
-  drg.textContent = "DRAG";
+  drg.textContent = "↔"; drg.title = "drag across the keys to glide";
   drg.classList.toggle("on", !!micro.dragOn);
   drg.onclick = ()=>{ micro.dragOn = !micro.dragOn; buildMicro(); saveState(); };
   const stg = document.createElement("button"); stg.className = "pbtn small"; stg.id = "ksplit";
   stg.onclick = ()=>{ micro.splitOn = !micro.splitOn; buildMicro(); saveState(); };
-  stg.textContent = micro.splitOn ? "KEYS A|B" : "KEYS A";
+  stg.textContent = micro.splitOn ? "A|B" : "A only"; stg.title = "split the keyboard between the two instruments";
   stg.classList.toggle("on", !!micro.splitOn);
   const sm = document.createElement("button"); sm.className = "pbtn small"; sm.textContent = "-";
   sm.title = "move the split down";
@@ -3722,8 +3729,8 @@ function buildMicro(){
   sp.onclick = ()=>{ micro.split = Math.min(96, (micro.split|0) + 1); paintMidi(); buildMicro(); saveState(); };
   bar.append(sel, ld, pl, pm, lp, drg, stg, sm, sl, sp, st);
   refreshMidiLists().then(()=> paintMidi());
-  const sz = document.createElement("button");
-  sz.textContent = micro.size === "small" ? "SMALL KEYS" : "BIG KEYS";
+  const sz = document.createElement("button"); sz.className = "pbtn small";
+  sz.textContent = micro.size === "small" ? "▦" : "▩"; sz.title = micro.size === "small" ? "small keys" : "big keys";
   if(micro.size === "small") sz.classList.add("on");
   sz.onclick = ()=>{
     micro.size = micro.size === "small" ? "big" : "small";
@@ -3955,7 +3962,7 @@ setInterval(()=>{
 function paintMidi(){
   const b = document.getElementById("midiplay");
   if(!b) return;
-  b.textContent = midi.playing ? "STOP" : "PLAY";
+  b.textContent = midi.playing ? "■" : "▶";
   b.classList.toggle("on", midi.playing);
   const lp = document.getElementById("midiloop");
   if(lp) lp.classList.toggle("on", !!midi.loop);
@@ -4269,7 +4276,7 @@ function paintGplay(){
   const b = document.getElementById("gplay");
   if(!b) return;
   const on = transport.on || (typeof midi !== "undefined" && midi.playing);
-  b.textContent = on ? "STOP" : "PLAY";
+  b.textContent = on ? "■" : "▶";
   b.classList.toggle("on", on);
 }
 document.getElementById("gplay").onclick = ()=>{
