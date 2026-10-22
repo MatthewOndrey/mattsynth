@@ -1042,14 +1042,52 @@ function makePad(step, cls, showOct){
 /* controllers live in #view; add a builder and a button to get another one */
 function buildKalimba(){
   const v=document.getElementById("view"); v.innerHTML="";
-  const top=document.createElement("div"); top.className="row"; top.id="top";
-  const bot=document.createElement("div"); bot.className="row"; bot.id="bot";
-  /* the 14 inch panel has room for ten tines a row: twenty notes, nearly three
-     octaves of the scale, instead of the old thirteen */
-  const COLS = 10;
-  for(let i=COLS;i<COLS*2;i++) top.appendChild(makePad(i,"tine"));
-  for(let i=0;i<COLS;i++) bot.appendChild(makePad(i,"tine"));
-  v.appendChild(top); v.appendChild(bot);
+  /* a kalimba is not a keyboard: the lowest tine sits in the middle, the scale runs
+     outward alternately right then left, and the tines get shorter as they rise.
+     Everything is drawn over a wooden body with a sound hole and a bridge. */
+  const stage=document.createElement("div");
+  stage.id="kalistage";
+  stage.style.cssText = "position:relative; flex:1; margin:10px 6px 6px; border-radius:20px;" +
+    "background:radial-gradient(120% 90% at 50% 12%, #6b4322 0%, #4a2c15 45%, #2b1809 100%);" +
+    "box-shadow: inset 0 2px 0 rgba(255,210,150,.18), inset 0 -18px 40px rgba(0,0,0,.55);" +
+    "overflow:hidden; touch-action:none;";
+
+  const hole=document.createElement("div");
+  hole.style.cssText = "position:absolute; left:50%; bottom:7%; width:12%; padding-bottom:6%;" +
+    "transform:translateX(-50%); border-radius:50%; background:radial-gradient(circle at 50% 40%, #120a04, #241206 70%);" +
+    "box-shadow: inset 0 6px 14px rgba(0,0,0,.9), 0 0 0 6px rgba(255,200,140,.06);";
+  stage.appendChild(hole);
+
+  const bridge=document.createElement("div");
+  bridge.style.cssText = "position:absolute; left:6%; right:6%; bottom:26%; height:14px;" +
+    "background:linear-gradient(180deg,#2a1a0c,#120a04); border-radius:6px;" +
+    "box-shadow: 0 2px 6px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,220,170,.15);";
+  stage.appendChild(bridge);
+
+  const N = 17;
+  const tines = [];
+  for(let k=0;k<N;k++){                        /* k is the scale step above the centre */
+    const pad = makePad(k, "tine");
+    const sign = k === 0 ? 0 : (k % 2 ? 1 : -1);
+    const d = Math.ceil(k / 2);
+    const hPct = 58 - k * 2.2;                 /* low notes are the long tines */
+    pad.style.cssText = "position:absolute; width:46px; height:" + hPct + "%;" +
+      "left:calc(50% + " + (sign * d * 58) + "px - 23px); bottom:" + (30 + (58 - hPct) * 0.35) + "%;" +
+      "border-radius:6px 6px 10px 10px; border:1px solid rgba(0,0,0,.55);" +
+      "background:linear-gradient(180deg,#d8dde3 0%,#a9b2ba 38%,#7d868f 72%,#5a636b 100%);" +
+      "box-shadow: 0 6px 10px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.75);" +
+      "display:flex; align-items:flex-start; justify-content:center; padding-top:6px;" +
+      "font: 700 15px system-ui; color:#0d1216; touch-action:none;";
+    tines.push({pad, k, sign, d});
+    stage.appendChild(pad);
+  }
+  v.appendChild(stage);
+
+  /* the two thumb rails, so it reads as something you hold */
+  const rail=document.createElement("div");
+  rail.style.cssText = "position:absolute; left:0; right:0; bottom:0; height:16%;" +
+    "background:linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.45)); pointer-events:none;";
+  stage.appendChild(rail);
 }
 
 function buildGrid(){
