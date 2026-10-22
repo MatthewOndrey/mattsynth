@@ -12,6 +12,8 @@ stdlib only. Serves:
   POST /send    a bare command body, e.g. "N 60 100"
 """
 
+import base64
+import hashlib
 import http.server
 import json
 import os
@@ -928,7 +930,28 @@ function setPart(p){
   if(d) d.classList.toggle("on", part === 3);
 }
 
+/* one websocket for commands: a note no longer costs a request and a round trip.
+   the fetch path stays as a fallback so a dropped socket cannot silence the panel. */
+let wsLink = null, wsOut = [];
+function wsStart(){
+  try{
+    wsLink = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  }catch(e){ wsLink = null; return; }
+  wsLink.onopen = ()=>{
+    const q = wsOut; wsOut = [];
+    q.forEach(function(m){ try{ wsLink.send(m); }catch(e){} });
+  };
+  wsLink.onclose = ()=> setTimeout(wsStart, 1200);
+  wsLink.onerror = ()=>{};
+}
+wsStart();
+
 function send(body){
+  if(wsLink && wsLink.readyState === 1){
+    try{ wsLink.send(body); return; }catch(e){}
+  }
+  wsOut.push(body);
+  if(wsOut.length > 96) wsOut.shift();
   fetch("/send", {method:"POST", body:body}).catch(()=>{});
 }
 function scalePitch(step){
@@ -5099,8 +5122,77 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    # ---- websocket command channel -------------------------------------
+    def _ws_handshake(self):
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        acc = base64.b64encode(hashlib.sha1(
+            (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", acc)
+        self.end_headers()
+        self.wfile.flush()
+
+    def _ws_read(self):
+        """one frame: returns (opcode, payload) or (None, None) when the peer goes away"""
+        hdr = self.rfile.read(2)
+        if len(hdr) < 2:
+            return None, None
+        op = hdr[0] & 0x0F
+        masked = hdr[1] & 0x80
+        ln = hdr[1] & 0x7F
+        if ln == 126:
+            ext = self.rfile.read(2)
+            if len(ext) < 2:
+                return None, None
+            ln = int.from_bytes(ext, "big")
+        elif ln == 127:
+            ext = self.rfile.read(8)
+            if len(ext) < 8:
+                return None, None
+            ln = int.from_bytes(ext, "big")
+        mask = self.rfile.read(4) if masked else b""
+        data = self.rfile.read(ln) if ln else b""
+        if masked and len(mask) == 4:
+            data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+        return op, data
+
+    def _ws_write(self, text):
+        data = text.encode()
+        n = len(data)
+        if n < 126:
+            frame = bytes([0x81, n])
+        elif n < 65536:
+            frame = bytes([0x81, 126]) + n.to_bytes(2, "big")
+        else:
+            frame = bytes([0x81, 127]) + n.to_bytes(8, "big")
+        self.wfile.write(frame + data)
+        self.wfile.flush()
+
+    def _ws_loop(self):
+        self.close_connection = True
+        self.wfile.flush()
+        while True:
+            op, data = self._ws_read()
+            if op is None or op == 0x8:
+                return
+            if op == 0x9:                      # ping
+                self.wfile.write(bytes([0x8A, len(data)]) + data)
+                self.wfile.flush()
+                continue
+            if op in (0x1, 0x2) and data:
+                body = data.decode(errors="replace").strip()
+                if body:
+                    if not wolf_handle(body):
+                        send_body(body)
+
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
+            self._ws_handshake()
+            self._ws_loop()
+            return
         if path in ("/", "/index.html"):
             body = HTML.encode()
             self.send_response(200)
