@@ -3693,12 +3693,14 @@ function microCents(c, r, cols, rows){
   const steps = (c - cx) * stepX - (r - cy) * cfg.s;
   return 6000 + micro.root * 100 + steps * (1200 / micro.edo);
 }
-function microKey(c, r, cols, rows, forcedNote, forcedLabel){
+function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
   const cents = microCents(c, r, cols, rows);
   const note = (forcedNote !== undefined && forcedNote !== null)
              ? Math.max(0, Math.min(127, forcedNote | 0))
              : Math.max(0, Math.min(127, Math.round(cents / 100)));
-  const off = Math.round(cents - note * 100);
+  const off = (forcedCents !== undefined && forcedCents !== null)
+            ? (forcedCents | 0)
+            : Math.round(cents - note * 100);
   const cfg = EDO_CFG[micro.edo];
   const stepX = micro.layout === "hex" ? 1 : cfg.g;
   const deg = Math.round(((c - (cols - 1) / 2) * stepX - (r - (rows - 1) / 2) * cfg.s) % micro.edo);
@@ -4117,12 +4119,18 @@ function hexGrid(container){
             const wid = Math.max(1, Math.floor(COLS / DRUMS.length));
             const di = Math.min(DRUMS.length - 1, Math.floor(c / wid));
             fNote = DRUMS[di];
-            fLab = (c % wid === Math.floor(wid / 2)) ? DRUM_NAMES[di] : "";
+            fLab = DRUM_NAMES[di];   /* every key in the block says which drum it is */
           }
-          else if(rUp === 1){ zone = 3; }
+          else if(rUp === 1){
+            /* the bass row is chromatic, twelve tone, no microtonal offsets: the Wolf is
+               an analogue mono synth and anything else falls apart there */
+            zone = 3;
+            fNote = Math.max(24, Math.min(96, 48 + (c - Math.floor(COLS / 2))));
+            fLab = NOTE[fNote % 12];
+          }
           else { zone = 0; }
         }
-        const k = microKey(c, r, COLS, ROWS, fNote, fLab);
+        const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone === 2 || zone === 3) ? 0 : null);
         k.dataset.zone = zone;
         k.style.width = w + "px";
         k.style.height = h + "px";
