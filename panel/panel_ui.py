@@ -2229,6 +2229,8 @@ function wtKnob(def){
   const cell = document.createElement("div");
   cell.className = "opkn";
   cell.dataset.key = key;
+  cell.dataset.min = min;
+  cell.dataset.max = max;
   const t = document.createElement("div"); t.className = "kt"; t.textContent = label;
   const dial = document.createElement("div"); dial.className = "kdial";
   dial.innerHTML = '<svg viewBox="0 0 64 64"><circle class="ktr" cx="32" cy="32" r="26"/>' +
@@ -2607,8 +2609,18 @@ setInterval(()=>{
       const beats = [0.25,0.5,1,2,4,8][L.div] || 1;
       const hz = ((bpm || 120)/60)/beats;
       const ph = (performance.now()/1000*hz) % 1;
-      const w = Math.sin(ph*6.2831853);
-      const a = (-135 + 270*((w+1)/2)) * Math.PI/180;
+      let w = Math.sin(ph*6.2831853);
+      if(L.shape === 2) w = ph*2 - 1;
+      else if(L.shape === 3) w = ph < 0.5 ? 1 : -1;
+      else if(L.shape === 1) w = ph < 0.5 ? (ph*4 - 1) : (3 - ph*4);
+      else if(L.shape === 4) w = Math.sin(ph*6.2831853) > 0 ? 0.6 : -0.6;
+      /* the dot rides the band: value plus or minus half the amount, never the
+         full knob sweep, so what you see matches what the LFO will do */
+      const lo = +(c.dataset.min || 0), hi = +(c.dataset.max || 1000);
+      const fv = (WTg()[key] - lo) / ((hi - lo) || 1);
+      const dep = Math.min(1, Math.abs(amt) / 1000);
+      const u = Math.max(0, Math.min(1, fv + w * dep / 2));
+      const a = (-135 + 270*u) * Math.PI/180;
       dot.style.left = (cx + Math.sin(a)*R - 5).toFixed(1)+"px";
       dot.style.top  = (cy - Math.cos(a)*R - 5).toFixed(1)+"px";
     });
