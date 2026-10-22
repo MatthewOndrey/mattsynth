@@ -3624,6 +3624,7 @@ function microKey(c, r, cols, rows){
   d.className = "mkey";
   d.dataset.note = note;
   d.dataset.cents = off;
+  d.dataset.h = hue;
   d.style.background = "hsl(" + hue + ",62%," + (58 + (off % 12)) + "%)";
   d.textContent = NOTE[note % 12] + (Math.floor(note / 12) - 1);
   const sub = document.createElement("small");
@@ -3704,6 +3705,10 @@ function buildMicro(){
   lp.onclick = ()=>{ midi.loop = !midi.loop; paintMidi(); };
   lp.classList.toggle("on", !!midi.loop);
   const st = document.createElement("span"); st.className = "lab"; st.id = "midistat";
+  const drg = document.createElement("button"); drg.className = "pbtn small"; drg.id = "dragmode";
+  drg.textContent = "DRAG";
+  drg.classList.toggle("on", !!micro.dragOn);
+  drg.onclick = ()=>{ micro.dragOn = !micro.dragOn; buildMicro(); saveState(); };
   const stg = document.createElement("button"); stg.className = "pbtn small"; stg.id = "ksplit";
   stg.onclick = ()=>{ micro.splitOn = !micro.splitOn; buildMicro(); saveState(); };
   stg.textContent = micro.splitOn ? "KEYS A|B" : "KEYS A";
@@ -3715,7 +3720,7 @@ function buildMicro(){
   const sp = document.createElement("button"); sp.className = "pbtn small"; sp.textContent = "+";
   sp.title = "move the split up";
   sp.onclick = ()=>{ micro.split = Math.min(96, (micro.split|0) + 1); paintMidi(); buildMicro(); saveState(); };
-  bar.append(sel, ld, pl, pm, lp, stg, sm, sl, sp, st);
+  bar.append(sel, ld, pl, pm, lp, drg, stg, sm, sl, sp, st);
   refreshMidiLists().then(()=> paintMidi());
   const sz = document.createElement("button");
   sz.textContent = micro.size === "small" ? "SMALL KEYS" : "BIG KEYS";
@@ -4009,9 +4014,10 @@ function hexGrid(container){
         if(micro.splitOn && (+k.dataset.note < (micro.split|0))){
           /* inline, so it cannot be lost to a stylesheet problem again */
           k.dataset.hue = k.style.background;
-          k.style.background = "#2b3138";
-          k.style.boxShadow = "inset 0 0 0 4px #ffb74d";
-          k.style.color = "#ffb74d";
+          const hu = (+k.dataset.h || 200);
+          k.style.background = "linear-gradient(160deg, hsl(" + hu + ",48%,38%), hsl(" + hu + ",55%,20%))";
+          k.style.boxShadow = "inset 0 2px 5px rgba(255,255,255,.22), inset 0 -6px 12px rgba(0,0,0,.55), 0 0 0 2px rgba(255,183,77,.55)";
+          k.style.color = "#ffe6bf";
         } else {
           if(k.dataset.hue){ k.style.background = k.dataset.hue; k.dataset.hue = ""; }
           k.style.boxShadow = "";
@@ -4026,6 +4032,39 @@ function hexGrid(container){
     hexKeys = grid.__keys;
     relightHeld();
   };
+  /* drag mode: one pointer, every key it crosses sounds and the last one stops */
+  let dPtr = null, dEl = null, dNote = -1, dOff = 0;
+  const releaseDrag = ()=>{
+    if(dEl){ send("O " + dNote + (dOff ? " " + dOff : "")); dEl.classList.remove("up"); }
+    dEl = null; dNote = -1; dOff = 0;
+  };
+  const hitDrag = (ev)=>{
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    const k = el && el.closest ? el.closest(".mkey") : null;
+    if(!k || k === dEl) return;
+    releaseDrag();
+    const n = +k.dataset.note, off = +k.dataset.cents || 0;
+    const p = micro.splitOn ? ((n < (micro.split | 0)) ? 1 : 0) : part;
+    send("N " + n + " 96 " + p + " " + off);
+    k.classList.add("up");
+    dEl = k; dNote = n; dOff = off;
+  };
+  grid.addEventListener("pointerdown", ev=>{
+    if(!micro.dragOn) return;
+    ev.preventDefault(); ev.stopPropagation();
+    dPtr = ev.pointerId;
+    try { grid.setPointerCapture(ev.pointerId); } catch(e) {}
+    hitDrag(ev);
+  }, true);
+  grid.addEventListener("pointermove", ev=>{
+    if(!micro.dragOn || ev.pointerId !== dPtr) return;
+    ev.preventDefault();
+    hitDrag(ev);
+  }, true);
+  const endDrag = ev=>{ if(!micro.dragOn) return; if(dPtr !== null && ev.pointerId !== dPtr) return; dPtr = null; releaseDrag(); };
+  grid.addEventListener("pointerup", endDrag, true);
+  grid.addEventListener("pointercancel", endDrag, true);
+
   requestAnimationFrame(()=>{ try { fill(); } catch(e){ console.error("hexGrid", e); } });
   return grid;
 }
@@ -4324,6 +4363,7 @@ document.getElementById("engsel").onclick = ()=>{
   paintEng();
   if(engWT) renderWtPatchList(); else renderPatchList();
   paintSlots();
+  syncDropdownToPart();
 };
 
 /* master volume: P 26 on the Pod, 0..1000, 1000 = unity, smoothed per sample */
@@ -4394,9 +4434,22 @@ document.querySelectorAll("#abslots .slot").forEach(b=>{
     wtPart = +b.dataset.p;
     send("P 17 " + wtPart);
     paintSlots();
+    syncDropdownToPart();
     if(view === "wt") renderView();
   };
 });
+
+/* the header has to show what is loaded in the slot you just selected */
+function syncDropdownToPart(){
+  const name = slotName[wtPart] || "";
+  if(engWT){
+    const i = (wtListItems || []).indexOf(name);
+    if(i >= 0) patchSel.value = i;
+  } else {
+    const i = patches.findIndex(n=> String(n).trim() === String(name).trim());
+    if(i >= 0) patchSel.value = i;
+  }
+}
 
 /* in WT mode the header dropdown lists wavetable patches, not DX7 banks */
 let wtListItems = [], wtListFiles = [];
@@ -4571,7 +4624,7 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split},
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn},
     gmode: transport.global,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
@@ -4659,6 +4712,7 @@ function applyState(s){
   if(s.micro){
     if(typeof s.micro.splitOn === "boolean") micro.splitOn = s.micro.splitOn;
     if(typeof s.micro.split === "number") micro.split = s.micro.split;
+    if(typeof s.micro.dragOn === "boolean") micro.dragOn = s.micro.dragOn;
     if([12,19,24,31].indexOf(s.micro.edo) >= 0) micro.edo = s.micro.edo;
     if(s.micro.layout === "hex" || s.micro.layout === "bosa") micro.layout = s.micro.layout;
     if(s.micro.size === "small" || s.micro.size === "big") micro.size = s.micro.size;
