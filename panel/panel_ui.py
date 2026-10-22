@@ -3981,6 +3981,12 @@ function midiCents(ch){ return Math.round((midi.bend[ch] || 0) / 8192 * midiRang
 /* two part routing for files: everything on A, or split by channel, or by register */
 const MIDI_PART_SPLIT = 55;   /* G3, the default split */
 function midiPartOf(e){
+  if(midi.partMode === "abcd"){
+    /* four way: drums to the Wolf, bass to the Pod's part B, the rest split by channel */
+    if((e.ch | 0) === 9) return 2;
+    if((e.ch | 0) === 2) return 1;
+    return 0;
+  }
   if(midi.partMode === "chan") return ((e.ch | 0) >= 2) ? 1 : 0;
   if(midi.partMode === "key")  return ((e.n | 0) < (midi.partSplit | 0)) ? 1 : 0;
   return 0;
@@ -3989,16 +3995,18 @@ function midiPartLabel(){
   /* short, so the button stays the size of its neighbours */
   if(midi.partMode === "chan") return "BY CH";
   if(midi.partMode === "key")  return "BY KEY";
+  if(midi.partMode === "abcd") return "A|B|C|D";
   return "ALL A";
 }
 function midiPartTitle(){
+  if(midi.partMode === "abcd") return "drums to C, bass to B, the rest to A";
   if(midi.partMode === "chan") return "files route by channel: A on 0-1, B on 2-3";
   if(midi.partMode === "key")  return "files route by register: A above " +
     NOTE[(midi.partSplit|0) % 12] + (Math.floor((midi.partSplit|0)/12)-1) + ", B below";
   return "every file note plays part A";
 }
 function midiPartCycle(){
-  const modes = ["a", "chan", "key"];
+  const modes = ["a", "chan", "key", "abcd"];
   const i = Math.max(0, modes.indexOf(midi.partMode || "a"));
   midi.partMode = modes[(i + 1) % modes.length];
   const b = document.getElementById("midipart");
