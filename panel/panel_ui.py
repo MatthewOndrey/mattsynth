@@ -1050,6 +1050,7 @@ function buildKalimba(){
   for(let i=LO;i<LO+HI;i++) top.appendChild(makePad(i,"tine"));
   for(let i=0;i<LO;i++) bot.appendChild(makePad(i,"tine"));
   top.style.paddingLeft = (100 / (LO * 2)) + "%";
+  top.style.paddingRight = (100 / (LO * 2)) + "%";
   v.appendChild(top); v.appendChild(bot);
 }
 
@@ -4604,11 +4605,42 @@ document.getElementById("bankload").onclick=async ()=>{
     msg.title = t;
   } catch(err){ msg.textContent = "failed"; }
 };
+/* A flash or a power cycle leaves the Pod with its built-in voices: the bank lives in
+   RAM. Whenever the link comes back, push the bank and the patch the panel had. */
+let lastRx = 0, linkWasDown = false, restoring = false;
+async function restoreBankPatch(){
+  if(restoring) return;
+  restoring = true;
+  try{
+    const be = document.getElementById("banksel");
+    const b = (typeof savedBank === "string" && savedBank) || (be ? be.value : "");
+    if(!be || !b) { restoring = false; return; }
+    for(let i = 0; i < 25; i++){
+      if([].some.call(be.options, o=> o.value === b)) break;
+      await new Promise(r=> setTimeout(r, 200));
+    }
+    be.value = b;
+    document.getElementById("bankload").click();
+    await new Promise(r=> setTimeout(r, 1400));
+    send("P 4 " + (patchIdx | 0));
+    send("P 17 " + wtPart);
+    if(engWT) wtLfoSend("all");
+  }catch(e){}
+  restoring = false;
+}
+setInterval(()=>{
+  if(!lastRx) return;
+  const down = Date.now() - lastRx > 4000;
+  if(down) linkWasDown = true;
+  else if(linkWasDown && !down){ linkWasDown = false; restoreBankPatch(); }
+}, 1000);
+
 refreshBanks();
 setInterval(refreshBanks, 8000);
 document.getElementById("banksel").addEventListener("pointerdown", refreshBanks);
 es.onmessage=ev=>{
   const t=ev.data;
+  lastRx = Date.now();
   if(t.startsWith("@C ")){
     const p=t.slice(3, t.indexOf("*")).split(" ");
     lastVoices = p[0]|0;
@@ -4664,12 +4696,14 @@ function snapshot(){
   };
 }
 
+let savedBank = "";
 function applyState(s){
   if(!s || s.v !== 1) return;
   /* what was loaded last time comes back: slot labels, wave set, midi file */
   if(Array.isArray(s.slot)){ s.slot.forEach((n, i)=>{ if(i < 2) slotName[i] = n || "init"; }); }
   if(s.wtf) setTimeout(()=>{ wtLoadFile(s.wtf).catch(()=>{}); }, 700);
   if(typeof s.partSplit === "number") midi.partSplit = s.partSplit;
+  if(typeof s.bank === "string" && s.bank) savedBank = s.bank;
   if(s.midi) setTimeout(()=>{ midiLoadFile(s.midi).catch(()=>{}); }, 900);
   setTimeout(()=>{ paintSlots(); if(engWT) renderWtPatchList(); fitHdr(); }, 1200);
   if(s.view) view = s.view;
