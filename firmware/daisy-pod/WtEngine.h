@@ -33,7 +33,7 @@ struct Params
        can land on FRAME at different rates while the third does vibrato. */
     /* modulation matrix: each LFO carries an amount for every destination, so one
        LFO can drive several knobs at once, each with its own depth */
-    static const int kDests = 14;
+    static const int kDests = 15;   /* 14 is PAN */
     struct Lfo
     {
         bool  on     = false;
@@ -44,6 +44,7 @@ struct Params
     };
     Lfo lfo[3];
     float lfoPh[3] = {0, 0, 0};   /* block-rate phase, used to sample envelope targets */
+    float pan = 0.0f;            /* -1 left, 0 centre, +1 right */
 
     /* per note shaping: a frame envelope, and two ways a note can sit further
        along the table than its neighbours */
@@ -104,6 +105,7 @@ class Engine
     void SetDetune(int part, float c)  { prm(part).detune = c; }
     void SetMorph(int part, float to, float secs) { prm(part).morph = to; prm(part).morphT = secs < 0.001f ? 0.001f : secs; }
     void SetLevel(int part, float l)   { prm(part).level  = l < 0.0f ? 0.0f : (l > 1.0f ? 1.0f : l); }
+    void SetPan(int part, float p)     { prm(part).pan    = p < -1.0f ? -1.0f : (p > 1.0f ? 1.0f : p); }
 
     /* overwrite part of a frame with a 16-bit single cycle: 512 samples per frame,
        sent as 16-sample chunks so a frame fits the Pod's 96-byte line buffer */
@@ -293,7 +295,7 @@ class Engine
 
         for(size_t s = 0; s < n; ++s)
         {
-            float mix = 0.0f;
+            float mixA = 0.0f, mixB = 0.0f;
             for(int i = 0; i < max_voices_; ++i)
             {
                 Voice& v = v_[i];
@@ -384,15 +386,36 @@ class Engine
                 const float b  = B[i0] + (B[i0 + 1] - B[i0]) * xf;
                 const float smp = (a + (b - a) * fMix) * v.env * v.vel * v.level;
 
-                mix += smp;
+                if(v.pidx) mixB += smp; else mixA += smp;
 
                 v.phase += v.inc * v.bend * (1.0f + v.detune * 0.0006f)
                          * powf(2.0f, detLfo / 1200.0f);
                 ++v.samples;
                 if(v.phase >= 1.0f) v.phase -= 1.0f;
             }
-            l[s] = mix * 0.6f;
-            r[s] = mix * 0.6f;
+            float panLfo = 0.0f;
+            for(int pi = 0; pi < kParts; ++pi)
+                for(int li = 0; li < 3; ++li)
+                {
+                    const Params::Lfo& L = prm_[pi].lfo[li];
+                    if(!L.on || L.amt[14] == 0.0f) continue;
+                    const float ph = prm_[pi].lfoPh[li];
+                    float w = sinf(ph * 6.2831853f);
+                    if(L.shape == 2) w = ph * 2.0f - 1.0f;
+                    else if(L.shape == 3) w = ph < 0.5f ? 1.0f : -1.0f;
+                    else if(L.shape == 1) w = ph < 0.5f ? (ph * 4.0f - 1.0f) : (3.0f - ph * 4.0f);
+                    panLfo += w * L.amt[14] * 0.5f;
+                }
+            float outL = 0.0f, outR = 0.0f;
+            {
+                const float pa = prm_[0].pan + panLfo, pb = prm_[1].pan + panLfo;
+                const float ca = pa < -1.0f ? -1.0f : (pa > 1.0f ? 1.0f : pa);
+                const float cb = pb < -1.0f ? -1.0f : (pb > 1.0f ? 1.0f : pb);
+                outL += mixA * sqrtf((1.0f - ca) * 0.5f) + mixB * sqrtf((1.0f - cb) * 0.5f);
+                outR += mixA * sqrtf((1.0f + ca) * 0.5f) + mixB * sqrtf((1.0f + cb) * 0.5f);
+            }
+            l[s] = outL * 0.85f;
+            r[s] = outR * 0.85f;
         }
     }
 

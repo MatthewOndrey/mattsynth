@@ -491,6 +491,7 @@ static void apply_param(int idx, int val)
                                     wt_morph_s[edit_part]); break;
         case 37: wt_morph_s[edit_part] = clampi(val, 1, 8000) / 1000.0f; break;
         case 38: synth.wts.SetLevel(edit_part, (float)clampi(val, 0, 1000) / 1000.0f); break;
+        case 39: synth.wts.SetPan(edit_part, ((float)clampi(val, 0, 1000) / 500.0f) - 1.0f); break;
         /* part LFO: target, shape, rate, depth, granularity, on */
         /* three LFOs per part: P 60..64 is A, 65..69 B, 70..74 C
            fields in order: target, div, depth, shape, on */

@@ -2142,6 +2142,7 @@ const WT_PARAMS = [
   ["sus",   "SUSTAIN", 0, 1000, 700, ""],
   ["rel",   "RELEASE", 1, 4000, 600, " ms"],
   ["det",   "DETUNE",  0, 60,   10,  " c"],
+  ["pan",   "PAN",     0, 1000, 500, ""],
   ["to",    "MORPH TO",0, 1000, 400, ""],
   ["time",  "MORPH T", 1, 8000, 1500," ms"],
   ["lvl",   "LEVEL",   0, 1000, 800, ""],
@@ -2161,7 +2162,7 @@ const WT_PRESETS = [
   ["PLUCK",   {frame:620,  atk:1,  dec:160, sus:0,   rel:200,  det:5,  to:380,  time:250,  lvl:820}],
   ["MORPH UP",{frame:0,    atk:8,  dec:1200,sus:800, rel:1300, det:9,  to:1000, time:5000, lvl:760}]
 ];
-const WT_DEF = { frame:400, atk:20, dec:400, sus:700, rel:600, det:10, to:400, time:1500, lvl:800,
+const WT_DEF = { frame:400, atk:20, dec:400, sus:700, rel:600, det:10, to:400, time:1500, lvl:800, pan:500,
                  envAmt:500, envT:200, velF:0, keyF:0, rnd:0,
                  lfo:[0,1,2].map(function(){ return {on:false,shape:0,div:2,steps:0,amt:[0,0,0,0,0,0,0,0,0,0,0,0,0,0]}; }) };
 const WT2 = [Object.assign({}, WT_DEF), Object.assign({}, WT_DEF)];
@@ -2173,7 +2174,7 @@ let wtSamples = null;  /* eight Float32Array(512) once a set is loaded */
 
 function wtSend(k){
   const P = {frame:30, atk:31, dec:32, sus:33, rel:34, det:35, to:36, time:37, lvl:38,
-             envAmt:46, envT:47, velF:48, keyF:49, rnd:50}[k];
+             envAmt:46, envT:47, velF:48, keyF:49, rnd:50, pan:39}[k];
   if(P === undefined) return;
   send("P " + P + " " + Math.round(WTg()[k]));
 }
@@ -2385,7 +2386,7 @@ const WT_LFO_SHAPES  = ["SIN", "TRI", "SAW", "SQR", "S&H"];
 
 const WT_MOD_FOR = ["frame", "to", "det", "lvl"];
 const WT_DEST = {frame:0, to:1, det:2, lvl:3, atk:4, dec:5, sus:6, rel:7,
-                 envAmt:8, envT:9, velF:10, keyF:11, rnd:12, morphT:13};
+                 envAmt:8, envT:9, velF:10, keyF:11, rnd:12, morphT:13, pan:14};
 const WT_ZERO14 = ()=>[0,0,0,0,0,0,0,0,0,0,0,0,0,0];
 function wtLfoSend(which, li){
   const list = WTg().lfo;
