@@ -102,6 +102,13 @@ def wolf_handle(body):
             p = 0
         if p >= 2:
             ch = 9 if p == 2 else 0
+            try:
+                cents = float(parts[4]) if len(parts) > 4 else 0.0
+            except ValueError:
+                cents = 0.0
+            if p == 3 and cents:
+                v14 = int(round(max(-200.0, min(200.0, cents)) / 200.0 * 8192)) + 8192
+                wolf_write([0xE0 | ch, v14 & 0x7F, (v14 >> 7) & 0x7F])
             wolf_write([0x90 | ch, n & 127, v])
             WOLF["notes"][(p, n)] = True
             return True
@@ -114,6 +121,8 @@ def wolf_handle(body):
         for p in (2, 3):
             if WOLF["notes"].pop((p, n), None):
                 wolf_write([0x80 | (9 if p == 2 else 0), n & 127, 0])
+                if p == 3:
+                    wolf_write([0xE0, 0, 64])
                 return True
         return False
     if cmd == "R":
@@ -3795,6 +3804,12 @@ function buildMicro(){
   lp.onclick = ()=>{ midi.loop = !midi.loop; paintMidi(); };
   lp.classList.toggle("on", !!midi.loop);
   const st = document.createElement("span"); st.className = "lab"; st.id = "midistat";
+  const bo = document.createElement("button"); bo.className = "pbtn small"; bo.textContent = "B-";
+  bo.title = "bass down a semitone";
+  bo.onclick = ()=>{ micro.bassOfs = ((typeof micro.bassOfs === "number") ? micro.bassOfs : -8) - 1; buildMicro(); saveState(); };
+  const bu = document.createElement("button"); bu.className = "pbtn small"; bu.textContent = "B+";
+  bu.title = "bass up a semitone";
+  bu.onclick = ()=>{ micro.bassOfs = ((typeof micro.bassOfs === "number") ? micro.bassOfs : -8) + 1; buildMicro(); saveState(); };
   const drg = document.createElement("button"); drg.className = "pbtn small"; drg.id = "dragmode";
   drg.textContent = "↔"; drg.title = "drag across the keys to glide";
   drg.classList.toggle("on", !!micro.dragOn);
@@ -3816,7 +3831,7 @@ function buildMicro(){
   const sp = document.createElement("button"); sp.className = "pbtn small"; sp.textContent = "+";
   sp.title = "move the split up";
   sp.onclick = ()=>{ micro.split = Math.min(96, (micro.split|0) + 1); paintMidi(); buildMicro(); saveState(); };
-  bar.append(sel, ld, pl, pm, lp, drg, stg, sm, sl, sp, st);
+  bar.append(sel, ld, pl, pm, lp, bo, bu, drg, stg, sm, sl, sp, st);
   refreshMidiLists().then(()=> paintMidi());
   const sz = document.createElement("button"); sz.className = "pbtn small";
   sz.textContent = micro.size === "small" ? "▦" : "▩"; sz.title = micro.size === "small" ? "small keys" : "big keys";
@@ -4114,7 +4129,7 @@ function hexGrid(container){
         const DRUMS = [36, 38, 40, 42, 44];
         const DRUM_NAMES = ["KICK", "SNR", "PERC", "CHH", "OHH"];
         const rUp = ROWS - 1 - r;
-        let zone = 0, fNote = null, fLab = null;
+        let zone = 0, fNote = null, fLab = null, fCents = 0;
         if(micro.splitMode === "abcd" && rUp === 0){
           if(c < DRUMS.length){
             zone = 2; fNote = DRUMS[c]; fLab = DRUM_NAMES[c];
@@ -4130,12 +4145,17 @@ function hexGrid(container){
             /* back on the Wolf, as asked. Its bass stretches pitch, so the row is a
                near chromatic approximation rather than exact; the offset below was
                measured against the board. */
-            const shift = -8;   /* E on the row lands on E, measured against the board */
-            fNote = Math.max(12, Math.min(120, want + shift));
+            /* the root sits where it sounds right; the Wolf stretches everything above it
+               by four thirds, so the span is compressed and the remainder goes out as
+               pitch bend cents. Root unchanged. */
+            const rootSent = 32;
+            const exact = rootSent + 0.75 * (want - 40);
+            fNote = Math.max(12, Math.min(120, Math.round(exact)));
+            fCents = Math.round((exact - Math.round(exact)) * 100);
             fLab = NOTE[(want % 12 + 12) % 12];
           }
         }
-        const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone ? 0 : null));
+        const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone ? fCents : null));
         k.dataset.zone = zone;
         k.style.width = w + "px";
         k.style.height = h + "px";
@@ -4789,7 +4809,7 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode},
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs},
     gmode: transport.global,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
@@ -4881,6 +4901,7 @@ function applyState(s){
     if(typeof s.micro.split === "number") micro.split = s.micro.split;
     if(typeof s.micro.dragOn === "boolean") micro.dragOn = s.micro.dragOn;
     if(typeof s.micro.splitMode === "string") micro.splitMode = s.micro.splitMode;
+    if(typeof s.micro.bassOfs === "number") micro.bassOfs = s.micro.bassOfs;
     if([12,19,24,31].indexOf(s.micro.edo) >= 0) micro.edo = s.micro.edo;
     if(s.micro.layout === "hex" || s.micro.layout === "bosa") micro.layout = s.micro.layout;
     if(s.micro.size === "small" || s.micro.size === "big") micro.size = s.micro.size;
