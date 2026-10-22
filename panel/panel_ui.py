@@ -3736,7 +3736,9 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
 }
 function buildMicro(){
   const v = document.getElementById("view"); v.innerHTML = "";
+  v.style.display = "flex"; v.style.flexDirection = "column"; v.style.minHeight = "0";
   const wrap = document.createElement("div"); wrap.id = "micro";
+  wrap.style.cssText = "display:flex; flex-direction:column; flex:1 1 auto; min-height:0;";
 
   const bar = document.createElement("div"); bar.className = "seqbar";
   const lab = (t)=>{ const s=document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
@@ -4086,7 +4088,8 @@ function hexGrid(container){
     const availW = v.clientWidth || window.innerWidth;
     const top = grid.getBoundingClientRect().top;
     /* the octave strip lives in the header now, so the floor is the view itself */
-    const bottom = v.getBoundingClientRect().bottom || window.innerHeight;
+    const stripEl = document.getElementById("drumstrip");
+    const bottom = (v.getBoundingClientRect().bottom || window.innerHeight) - (stripEl ? 92 : 0);
     const availH = Math.max(220, bottom - top - 6);
     const RUNS = 11;
     const wantCols = micro.size === "small" ? 28.5 : 16.5;
@@ -4109,28 +4112,17 @@ function hexGrid(container){
       for(let c = 0; c < COLS; c++){
         const DRUMS = [36, 38, 40, 42, 44];
         const DRUM_NAMES = ["KICK", "SNR", "PERC", "CHH", "OHH"];
-        const rUp = ROWS - 1 - r;                 /* 0 is the bottom row */
-        let zone = 0;
-        let fNote = null, fLab = null;
-        if(micro.splitMode === "abcd"){
-          if(rUp === 0){
-            /* one block per drum voice, not the same ten names repeated along the row */
-            zone = 2;
-            const wid = Math.max(1, Math.floor(COLS / DRUMS.length));
-            const di = Math.min(DRUMS.length - 1, Math.floor(c / wid));
-            fNote = DRUMS[di];
-            fLab = DRUM_NAMES[di];   /* every key in the block says which drum it is */
+        const rUp = ROWS - 1 - r;
+        let zone = 0, fNote = null, fLab = null;
+        if(micro.splitMode === "abcd" && rUp === 0){
+          if(c < DRUMS.length){
+            zone = 2; fNote = DRUMS[c]; fLab = DRUM_NAMES[c];
+          } else {
+            /* the rest of the bottom row is the bass, plain chromatic semitones */
+            zone = 3; fNote = Math.max(24, Math.min(96, 28 + (c - DRUMS.length))); fLab = NOTE[fNote % 12];
           }
-          else if(rUp === 1){
-            /* the bass row is chromatic, twelve tone, no microtonal offsets: the Wolf is
-               an analogue mono synth and anything else falls apart there */
-            zone = 3;
-            fNote = Math.max(24, Math.min(96, 48 + (c - Math.floor(COLS / 2))));
-            fLab = NOTE[fNote % 12];
-          }
-          else { zone = 0; }
         }
-        const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone === 2 || zone === 3) ? 0 : null);
+        const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone ? 0 : null));
         k.dataset.zone = zone;
         k.style.width = w + "px";
         k.style.height = h + "px";
