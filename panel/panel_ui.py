@@ -4146,10 +4146,10 @@ function hexGrid(container){
                near chromatic approximation rather than exact; the offset below was
                measured against the board. */
             /* the root sits where it sounds right; the Wolf stretches everything above it
-               by four thirds, so the span is compressed and the remainder goes out as
+               by four thirds, so the span is expanded and the remainder goes out as
                pitch bend cents. Root unchanged. */
             const rootSent = 32;
-            const exact = rootSent + 0.75 * (want - 40);
+            const exact = rootSent + (4 / 3) * (want - 40);
             fNote = Math.max(12, Math.min(120, Math.round(exact)));
             fCents = Math.round((exact - Math.round(exact)) * 100);
             fLab = NOTE[(want % 12 + 12) % 12];
