@@ -72,11 +72,22 @@ def wolf_map(n):
     return max(0, min(127, note)), cents
 
 def wolf_open():
-    if WOLF["dev"] is None:
-        try:
-            WOLF["dev"] = open(WOLF["path"], "wb", buffering=0)
-        except Exception:
-            WOLF["dev"] = False
+    """the Wolf re-enumerates on its own schedule, so the node can move or go stale:
+       look for the port again rather than trusting the handle from boot"""
+    if WOLF["dev"] is None or WOLF["dev"] is False:
+        if WOLF.get("retry_at", 0.0) > time.time():
+            return None
+        import glob
+        for path in sorted(glob.glob("/dev/snd/midiC*D*")):
+            try:
+                WOLF["dev"] = open(path, "wb", buffering=0)
+                WOLF["path"] = path
+                WOLF["retry_at"] = 0.0
+                return WOLF["dev"]
+            except Exception:
+                continue
+        WOLF["dev"] = False
+        WOLF["retry_at"] = time.time() + 5.0
     return WOLF["dev"] or None
 
 def wolf_write(bs):
@@ -91,6 +102,10 @@ def wolf_write(bs):
             pass
     except Exception:
         WOLF["dev"] = None
+        try:
+            WOLF["dev"].close()
+        except Exception:
+            pass
 
 def wolf_handle(body):
     """True when the frame was consumed by the Wolf (part C drums, part D bass)"""
