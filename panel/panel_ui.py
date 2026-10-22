@@ -154,8 +154,13 @@ def wolf_handle(body):
                 return True
         return False
     if cmd == "R":
+        # CC 123 is not enough on this box: send a real note off for every note too
         for ch in (0, 9):
+            for n in range(128):
+                wolf_write([0x80 | ch, n, 0])
             wolf_write([0xB0 | ch, 123, 0])
+            wolf_write([0xB0 | ch, 120, 0])
+        wolf_write([0xFC])   # transport stop, in case its own sequencer is running
         WOLF["notes"].clear()
         return False          # panic still goes to the Pod as well
     return False
