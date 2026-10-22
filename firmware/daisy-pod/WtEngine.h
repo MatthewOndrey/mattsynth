@@ -117,7 +117,64 @@ class Engine
             table_[frame][s] = (float)d[i] / 32768.0f;
         }
         table_[frame][kSize] = table_[frame][0];
+        if(offset + n >= kSize) FinishFrame(frame);
     }
+
+    /* a loaded single cycle is raw: no band limit, so the top octaves fold harmonics
+       back as inharmonic tones. Normalise it, then derive two duller copies with a
+       three tap binomial, and pick the copy from the note pitch while playing. */
+    void FinishFrame(int f)
+    {
+        float peak = 0.0f;
+        for(int i = 0; i < kSize; ++i) if(fabsf(table_[f][i]) > peak) peak = fabsf(table_[f][i]);
+        const float g = peak > 0.001f ? 0.95f / peak : 1.0f;
+        if(g != 1.0f) for(int i = 0; i < kSize; ++i) table_[f][i] *= g;
+        table_[f][kSize] = table_[f][0];
+
+        for(int i = 0; i < kSize; ++i)
+        {
+            const int a = (i + kSize - 1) % kSize, b = i, c = (i + 1) % kSize;
+            mip1_[f][i] = 0.25f * table_[f][a] + 0.5f * table_[f][b] + 0.25f * table_[f][c];
+        }
+        mip1_[f][kSize] = mip1_[f][0];
+        for(int i = 0; i < kSize; ++i)
+        {
+            const int a = (i + kSize - 1) % kSize, b = i, c = (i + 1) % kSize;
+            mip2_[f][i] = 0.25f * mip1_[f][a] + 0.5f * mip1_[f][b] + 0.25f * mip1_[f][c];
+        }
+        mip2_[f][kSize] = mip2_[f][0];
+        if(f == kFrames - 1) MatchSetLevels();
+    }
+
+    /* the eight frames of a set should morph at a similar loudness, not jump */
+    void MatchSetLevels()
+    {
+        float rms[kFrames] = {0}, sum = 0.0f;
+        int nf = 0;
+        for(int f = 0; f < kFrames; ++f)
+        {
+            float acc = 0.0f;
+            for(int i = 0; i < kSize; ++i) acc += table_[f][i] * table_[f][i];
+            rms[f] = sqrtf(acc / kSize);
+            if(rms[f] > 0.0005f) { sum += rms[f]; ++nf; }
+        }
+        if(!nf) return;
+        const float target = sum / nf;
+        for(int f = 0; f < kFrames; ++f)
+        {
+            if(rms[f] < 0.0005f) continue;
+            float g = target / rms[f];
+            if(g < 0.5f) g = 0.5f;
+            if(g > 2.0f) g = 2.0f;
+            for(int i = 0; i <= kSize; ++i)
+            {
+                table_[f][i] *= g;
+                mip1_[f][i]  *= g;
+                mip2_[f][i]  *= g;
+            }
+        }
+    }
+
     bool FrameLoaded(int frame) const { return frame >= 0 && frame < kFrames; }
     void SetMaxVoices(int n) { max_voices_ = n < 1 ? 1 : (n > kMax ? kMax : n); }
     int  max_voices() const  { return max_voices_; }
@@ -316,8 +373,13 @@ class Engine
                 const int   i0 = (int)x;
                 const float xf = x - i0;
 
-                const float* A = table_[f0];
-                const float* B = table_[f1];
+                /* pick the copy that suits this note: raw below 900 Hz, one octave
+                   down to 2.2 kHz, two octaves above that */
+                const float hzNow = v.inc * sr_;
+                const float (*tab)[kSize + 1] = hzNow > 2200.0f ? mip2_
+                                               : (hzNow > 900.0f ? mip1_ : table_);
+                const float* A = tab[f0];
+                const float* B = tab[f1];
                 const float a  = A[i0] + (A[i0 + 1] - A[i0]) * xf;
                 const float b  = B[i0] + (B[i0 + 1] - B[i0]) * xf;
                 const float smp = (a + (b - a) * fMix) * v.env * v.vel * v.level;
@@ -382,12 +444,26 @@ class Engine
             if(peak > 0.0f)
                 for(int i = 0; i < kSize; ++i) table_[f][i] /= peak;
             table_[f][kSize] = table_[f][0];   /* wrap sample for interpolation */
+            for(int i = 0; i < kSize; ++i)
+            {
+                const int a = (i + kSize - 1) % kSize, b = i, c = (i + 1) % kSize;
+                mip1_[f][i] = 0.25f * table_[f][a] + 0.5f * table_[f][b] + 0.25f * table_[f][c];
+            }
+            mip1_[f][kSize] = mip1_[f][0];
+            for(int i = 0; i < kSize; ++i)
+            {
+                const int a = (i + kSize - 1) % kSize, b = i, c = (i + 1) % kSize;
+                mip2_[f][i] = 0.25f * mip1_[f][a] + 0.5f * mip1_[f][b] + 0.25f * mip1_[f][c];
+            }
+            mip2_[f][kSize] = mip2_[f][0];
         }
     }
 
     Voice  v_[kMax];
     Params prm_[kParts];
     float  table_[kFrames][kSize + 1];
+    float  mip1_[kFrames][kSize + 1];
+    float  mip2_[kFrames][kSize + 1];
     float  hz_[128] = {0};
     float  sr_ = 48000.0f;
     int    max_voices_ = 8;
