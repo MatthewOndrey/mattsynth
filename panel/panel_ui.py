@@ -258,7 +258,7 @@ body.fxoff #fx { display:none; }
 .seqbar button { background:var(--panel); color:var(--ink); border:1px solid var(--line);
                  border-radius:9px; padding:10px 18px; font-size:16px; }
 .seqbar button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
-.seqbar .lab { color:var(--dim); font-size:15px; }
+.seqbar .lab { white-space: nowrap; color:var(--dim); font-size:15px; }
 .trk { display:flex; gap:10px; align-items:stretch; flex:1; min-height:0; }
 .trk .meta { width:170px; display:flex; flex-direction:column; gap:5px; justify-content:center; }
 .trk .meta .row2 { display:flex; gap:6px; align-items:center; }
@@ -377,7 +377,7 @@ button.onhold { background:#2f6b3a !important; color:#fff !important; }
 #volwrap input[type=range] { width: 80px; }
 #bpm { width: 56px; }
 #volwrap { margin-left:auto; display:flex; align-items:center; gap:8px; padding:0 6px; }
-#volwrap .lab { font-size:12px; letter-spacing:.12em; }
+#volwrap .lab { white-space: nowrap; font-size:12px; letter-spacing:.12em; }
 #vol { width:170px; height:26px; accent-color:#4caf50; }
 #volv { min-width:38px; text-align:right; font-size:14px; color:#ddd; }
 #bankmsg { flex:0 0 auto; max-width:none; font-size:13px; color:#9fd8a4; }
@@ -487,6 +487,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
         text-shadow:none; min-width:0; }
 .mkey small { font-size:13px; font-weight:600; opacity:.72; }
 .mkey.up { outline:4px solid #fff; }
+.mkey.pb { filter: saturate(.35) brightness(.55); box-shadow: inset 0 0 0 4px #ffb74d; opacity:.85; }
 #mrow.hex { position:relative; flex:1; min-height:0; }
 #mrow.hex .mkey { position:absolute; border:none; border-radius:0;
                   clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
@@ -3633,10 +3634,12 @@ function microKey(c, r, cols, rows){
     if(fingers.has(ev.pointerId)) return;
     const y = touchY(ev, d);
     const vel = Math.round(36 + y * 91);
+    /* the split applies to the fingers, not just to files */
+    const liveP = micro.splitOn ? ((note < (micro.split|0)) ? 1 : 0) : part;
     fingers.set(ev.pointerId, {notes:[note], micro:[off], el:d, y:y, x:0, bx:ev.clientX,
       cents:0, sent:0, target:0, origin:note, hover:null, hoverAt:0, locked:false,
       lockCents:null, chording:false});
-    send("N " + note + " " + vel + " " + part + " " + off);
+    send("N " + note + " " + vel + " " + liveP + " " + off);
     d.classList.add("up");
     showFingers();
     try { d.setPointerCapture(ev.pointerId); } catch(e) {}
@@ -3701,7 +3704,18 @@ function buildMicro(){
   lp.onclick = ()=>{ midi.loop = !midi.loop; paintMidi(); };
   lp.classList.toggle("on", !!midi.loop);
   const st = document.createElement("span"); st.className = "lab"; st.id = "midistat";
-  bar.append(sel, ld, pl, pm, lp, st);
+  const stg = document.createElement("button"); stg.className = "pbtn small"; stg.id = "ksplit";
+  stg.onclick = ()=>{ micro.splitOn = !micro.splitOn; buildMicro(); saveState(); };
+  stg.textContent = micro.splitOn ? "KEYS A|B" : "KEYS A";
+  stg.classList.toggle("on", !!micro.splitOn);
+  const sm = document.createElement("button"); sm.className = "pbtn small"; sm.textContent = "-";
+  sm.title = "move the split down";
+  sm.onclick = ()=>{ micro.split = Math.max(24, (micro.split|0) - 1); paintMidi(); buildMicro(); saveState(); };
+  const sl = document.createElement("span"); sl.className = "lab"; sl.id = "splitlab";
+  const sp = document.createElement("button"); sp.className = "pbtn small"; sp.textContent = "+";
+  sp.title = "move the split up";
+  sp.onclick = ()=>{ micro.split = Math.min(96, (micro.split|0) + 1); paintMidi(); buildMicro(); saveState(); };
+  bar.append(sel, ld, pl, pm, lp, stg, sm, sl, sp, st);
   refreshMidiLists().then(()=> paintMidi());
   const sz = document.createElement("button");
   sz.textContent = micro.size === "small" ? "SMALL KEYS" : "BIG KEYS";
@@ -3744,7 +3758,8 @@ function buildMicro(){
    RPN 0,0 (pitch bend sensitivity) is honoured per channel, default 2 semitones. */
 const midi = {
   loop: false,
-  partMode: "a",   /* a = everything on part A, chan = by channel, key = by register */ name:"", evs:[], endMs:0, notes:0, playing:false, t0:0, i:0,
+  partMode: "a",   /* a = everything on part A, chan = by channel, key = by register */
+  partSplit: 55,   /* the note where B starts when splitting by register */ name:"", evs:[], endMs:0, notes:0, playing:false, t0:0, i:0,
                timer:null, bend:{}, range:{}, held:new Map() };
 
 function parseSmf(buf){
@@ -3833,15 +3848,15 @@ function midiLight(note, cents, on){
 function midiRange(ch){ return midi.range[ch] === undefined ? 2 : midi.range[ch]; }
 function midiCents(ch){ return Math.round((midi.bend[ch] || 0) / 8192 * midiRange(ch) * 100); }
 /* two part routing for files: everything on A, or split by channel, or by register */
-const MIDI_PART_SPLIT = 55;   /* G3 */
+const MIDI_PART_SPLIT = 55;   /* G3, the default split */
 function midiPartOf(e){
   if(midi.partMode === "chan") return ((e.ch | 0) >= 2) ? 1 : 0;
-  if(midi.partMode === "key")  return ((e.n | 0) < MIDI_PART_SPLIT) ? 1 : 0;
+  if(midi.partMode === "key")  return ((e.n | 0) < (midi.partSplit | 0)) ? 1 : 0;
   return 0;
 }
 function midiPartLabel(){
   if(midi.partMode === "chan") return "A: CH 0-1  B: CH 2-3";
-  if(midi.partMode === "key")  return "A ABOVE G3  B BELOW";
+  if(midi.partMode === "key")  return "A ABOVE " + NOTE[(midi.partSplit|0) % 12] + (Math.floor((midi.partSplit|0)/12)-1) + "  B BELOW";
   return "ALL PART A";
 }
 function midiPartCycle(){
@@ -3941,6 +3956,12 @@ function paintMidi(){
   if(lp) lp.classList.toggle("on", !!midi.loop);
   const pm = document.getElementById("midipart");
   if(pm){ pm.textContent = midiPartLabel(); pm.classList.toggle("on", midi.partMode !== "a"); }
+  const sl = document.getElementById("splitlab");
+  if(sl){
+    const n = micro.split | 0;
+    sl.textContent = "B BELOW " + NOTE[n % 12] + (Math.floor(n / 12) - 1);
+    sl.style.opacity = micro.splitOn ? 1 : 0.4;
+  }
   const st = document.getElementById("midistat");
   if(st) st.textContent = midi.name
     ? (midi.notes + " notes, " + (midi.endMs / 1000).toFixed(1) + " s" + (midi.playing ? ", playing" : ""))
@@ -3985,6 +4006,17 @@ function hexGrid(container){
         k.style.height = h + "px";
         k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
         k.style.top = Math.round(r * vpitch) + "px";
+        if(micro.splitOn && (+k.dataset.note < (micro.split|0))){
+          /* inline, so it cannot be lost to a stylesheet problem again */
+          k.dataset.hue = k.style.background;
+          k.style.background = "#2b3138";
+          k.style.boxShadow = "inset 0 0 0 4px #ffb74d";
+          k.style.color = "#ffb74d";
+        } else {
+          if(k.dataset.hue){ k.style.background = k.dataset.hue; k.dataset.hue = ""; }
+          k.style.boxShadow = "";
+          k.style.color = "#111";
+        }
         k.style.fontSize = Math.max(11, Math.round(w * 0.19)) + "px";
         k.style.lineHeight = "1.05";
         grid.__keys.push({el: k, pitch: (+k.dataset.note) * 100 + (+k.dataset.cents)});
@@ -4539,7 +4571,7 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size},
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split},
     gmode: transport.global,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
@@ -4565,6 +4597,7 @@ function applyState(s){
   /* what was loaded last time comes back: slot labels, wave set, midi file */
   if(Array.isArray(s.slot)){ s.slot.forEach((n, i)=>{ if(i < 2) slotName[i] = n || "init"; }); }
   if(s.wtf) setTimeout(()=>{ wtLoadFile(s.wtf).catch(()=>{}); }, 700);
+  if(typeof s.partSplit === "number") midi.partSplit = s.partSplit;
   if(s.midi) setTimeout(()=>{ midiLoadFile(s.midi).catch(()=>{}); }, 900);
   setTimeout(()=>{ paintSlots(); if(engWT) renderWtPatchList(); fitHdr(); }, 1200);
   if(s.view) view = s.view;
@@ -4624,6 +4657,8 @@ function applyState(s){
   if(typeof s.chordN === "number") chordN = Math.max(2, Math.min(6, s.chordN));
   if(typeof s.chordSpace === "number") chordSpace = Math.max(1, Math.min(4, s.chordSpace));
   if(s.micro){
+    if(typeof s.micro.splitOn === "boolean") micro.splitOn = s.micro.splitOn;
+    if(typeof s.micro.split === "number") micro.split = s.micro.split;
     if([12,19,24,31].indexOf(s.micro.edo) >= 0) micro.edo = s.micro.edo;
     if(s.micro.layout === "hex" || s.micro.layout === "bosa") micro.layout = s.micro.layout;
     if(s.micro.size === "small" || s.micro.size === "big") micro.size = s.micro.size;
