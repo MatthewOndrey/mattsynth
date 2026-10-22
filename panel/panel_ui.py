@@ -3693,9 +3693,11 @@ function microCents(c, r, cols, rows){
   const steps = (c - cx) * stepX - (r - cy) * cfg.s;
   return 6000 + micro.root * 100 + steps * (1200 / micro.edo);
 }
-function microKey(c, r, cols, rows){
+function microKey(c, r, cols, rows, forcedNote, forcedLabel){
   const cents = microCents(c, r, cols, rows);
-  const note = Math.max(0, Math.min(127, Math.round(cents / 100)));
+  const note = (forcedNote !== undefined && forcedNote !== null)
+             ? Math.max(0, Math.min(127, forcedNote | 0))
+             : Math.max(0, Math.min(127, Math.round(cents / 100)));
   const off = Math.round(cents - note * 100);
   const cfg = EDO_CFG[micro.edo];
   const stepX = micro.layout === "hex" ? 1 : cfg.g;
@@ -3708,9 +3710,9 @@ function microKey(c, r, cols, rows){
   d.dataset.cents = off;
   d.dataset.h = hue;
   d.style.background = "hsl(" + hue + ",62%," + (58 + (off % 12)) + "%)";
-  d.textContent = NOTE[note % 12] + (Math.floor(note / 12) - 1);
+  d.textContent = forcedLabel ? forcedLabel : (NOTE[note % 12] + (Math.floor(note / 12) - 1));
   const sub = document.createElement("small");
-  sub.textContent = (off === 0 ? "0" : (off > 0 ? "+" + off : String(off))) + "c";
+  sub.textContent = forcedLabel ? "" : ((off === 0 ? "0" : (off > 0 ? "+" + off : String(off))) + "c");
   d.appendChild(sub);
   d.addEventListener("pointerdown", ev=>{
     ev.preventDefault();
@@ -3718,7 +3720,8 @@ function microKey(c, r, cols, rows){
     const y = touchY(ev, d);
     const vel = Math.round(36 + y * 91);
     /* the split applies to the fingers, not just to files */
-    const liveP = micro.splitOn ? ((note < (micro.split|0)) ? 1 : 0) : part;
+    const zn = +d.dataset.zone || 0;
+    const liveP = zn ? zn : (micro.splitOn ? ((note < (micro.split|0)) ? 1 : 0) : part);
     fingers.set(ev.pointerId, {notes:[note], micro:[off], el:d, y:y, x:0, bx:ev.clientX,
       cents:0, sent:0, target:0, origin:note, hover:null, hoverAt:0, locked:false,
       lockCents:null, chording:false});
@@ -3792,8 +3795,14 @@ function buildMicro(){
   drg.classList.toggle("on", !!micro.dragOn);
   drg.onclick = ()=>{ micro.dragOn = !micro.dragOn; buildMicro(); saveState(); };
   const stg = document.createElement("button"); stg.className = "pbtn small"; stg.id = "ksplit";
-  stg.onclick = ()=>{ micro.splitOn = !micro.splitOn; buildMicro(); saveState(); };
-  stg.textContent = micro.splitOn ? "A|B" : "A only"; stg.title = "split the keyboard between the two instruments";
+  stg.onclick = ()=>{
+    if(!micro.splitOn) micro.splitOn = true;
+    else if(micro.splitMode !== "abcd") micro.splitMode = "abcd";
+    else { micro.splitOn = false; micro.splitMode = "ab"; }
+    buildMicro(); saveState();
+  };
+  stg.textContent = !micro.splitOn ? "A only" : (micro.splitMode === "abcd" ? "A|B|C|D" : "A|B");
+  stg.title = "cycle the keyboard split: off, two instruments, then drums and bass along the bottom";
   stg.classList.toggle("on", !!micro.splitOn);
   const sm = document.createElement("button"); sm.className = "pbtn small"; sm.textContent = "-";
   sm.title = "move the split down";
@@ -4096,18 +4105,31 @@ function hexGrid(container){
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
       for(let c = 0; c < COLS; c++){
-        const k = microKey(c, r, COLS, ROWS);
+        const DRUMS = [36, 38, 42, 46, 39, 45, 47, 50, 56, 75];
+        const DRUM_NAMES = ["KICK", "SNR", "CHH", "OHH", "CLP", "TOM1", "TOM2", "TOM3", "COW", "CLV"];
+        const rUp = ROWS - 1 - r;                 /* 0 is the bottom row */
+        let zone = 0;
+        let fNote = null, fLab = null;
+        if(micro.splitMode === "abcd"){
+          if(rUp === 0){ zone = 2; const di = c % DRUMS.length; fNote = DRUMS[di]; fLab = DRUM_NAMES[di]; }
+          else if(rUp === 1){ zone = 3; }
+          else { zone = 0; }
+        }
+        const k = microKey(c, r, COLS, ROWS, fNote, fLab);
+        k.dataset.zone = zone;
         k.style.width = w + "px";
         k.style.height = h + "px";
         k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
         k.style.top = Math.round(r * vpitch) + "px";
-        if(micro.splitOn && (+k.dataset.note < (micro.split|0))){
-          /* inline, so it cannot be lost to a stylesheet problem again */
+        const zn = +k.dataset.zone || 0;
+        if(zn === 2 || zn === 3 || (micro.splitOn && (+k.dataset.note < (micro.split|0)))){
+          const rim = zn === 2 ? "#ff8a65" : (zn === 3 ? "#b388ff" : "#ffb74d");
+          const hu = zn === 2 ? 14 : (zn === 3 ? 265 : (+k.dataset.h || 200));
           k.dataset.hue = k.style.background;
-          const hu = (+k.dataset.h || 200);
-          k.style.background = "linear-gradient(160deg, hsl(" + hu + ",48%,38%), hsl(" + hu + ",55%,20%))";
-          k.style.boxShadow = "inset 0 2px 5px rgba(255,255,255,.22), inset 0 -6px 12px rgba(0,0,0,.55), 0 0 0 2px rgba(255,183,77,.55)";
+          k.style.background = "linear-gradient(160deg, hsl(" + hu + ",52%,38%), hsl(" + hu + ",58%,19%))";
+          k.style.boxShadow = "inset 0 2px 5px rgba(255,255,255,.22), inset 0 -6px 12px rgba(0,0,0,.55), 0 0 0 2px " + rim;
           k.style.color = "#ffe6bf";
+          if(zn === 2) k.style.fontSize = "12px";
         } else {
           if(k.dataset.hue){ k.style.background = k.dataset.hue; k.dataset.hue = ""; }
           k.style.boxShadow = "";
@@ -4747,7 +4769,7 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn},
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode},
     gmode: transport.global,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
@@ -4838,6 +4860,7 @@ function applyState(s){
     if(typeof s.micro.splitOn === "boolean") micro.splitOn = s.micro.splitOn;
     if(typeof s.micro.split === "number") micro.split = s.micro.split;
     if(typeof s.micro.dragOn === "boolean") micro.dragOn = s.micro.dragOn;
+    if(typeof s.micro.splitMode === "string") micro.splitMode = s.micro.splitMode;
     if([12,19,24,31].indexOf(s.micro.edo) >= 0) micro.edo = s.micro.edo;
     if(s.micro.layout === "hex" || s.micro.layout === "bosa") micro.layout = s.micro.layout;
     if(s.micro.size === "small" || s.micro.size === "big") micro.size = s.micro.size;
