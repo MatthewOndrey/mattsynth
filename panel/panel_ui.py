@@ -4692,14 +4692,21 @@ patchSel.onchange = ()=>{
   const i = +patchSel.value;
   if(engWT) wtPick(i); else selectPatch(i);
 };
-document.getElementById("pprev").onclick=()=>{
-  const n = Math.max(1, patches.length);
-  selectPatch((patchIdx + n - 1) % n);
-};
-document.getElementById("pnext").onclick=()=>{
-  const n = Math.max(1, patches.length);
-  selectPatch((patchIdx + 1) % n);
-};
+/* the arrows follow whichever list the dropdown is showing */
+function patchStep(d){
+  if(engWT){
+    const n = (wtListItems || []).length;
+    if(!n) return;
+    const i = ((+patchSel.value || 0) + d + n) % n;
+    patchSel.value = i;
+    wtPick(i);
+  } else {
+    const n = Math.max(1, patches.length);
+    selectPatch((patchIdx + d + n) % n);
+  }
+}
+document.getElementById("pprev").onclick = ()=> patchStep(-1);
+document.getElementById("pnext").onclick = ()=> patchStep(1);
 /* the bank list is asked for once things are awake, and again if the link drops */
 setTimeout(()=>send("L"), 900);
 
