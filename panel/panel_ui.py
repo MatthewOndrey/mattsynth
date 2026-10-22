@@ -4193,6 +4193,15 @@ document.getElementById("gplay").onclick = ()=>{
 };
 
 /* file picker in the header, so a song is one click from the transport */
+/* the wave set list has to be known before the WT tab is ever opened, otherwise the
+   header dropdown only offers INIT and the saved presets */
+function loadWtFiles(){
+  return fetch("/wt").then(r=> r.json()).then(names=>{
+    wtFiles = names.slice();
+    if(engWT) renderWtPatchList();
+  }).catch(()=>{});
+}
+
 function refreshMidiLists(){
   return fetch("/midi").then(r=> r.json()).then(names=>{
     ["hmidi", "midisel"].forEach(id=>{
@@ -4216,6 +4225,7 @@ function refreshMidiLists(){
   const sel = document.getElementById("hmidi"), ld = document.getElementById("hload");
   if(!sel || !ld) return;
   refreshMidiLists();
+  loadWtFiles();
   ld.onclick = ()=>{
     const f = sel.value;
     if(!f) return;
@@ -4340,9 +4350,11 @@ document.querySelectorAll("#abslots .slot").forEach(b=>{
 });
 
 /* in WT mode the header dropdown lists wavetable patches, not DX7 banks */
+let wtListItems = [], wtListFiles = [];
 function renderWtPatchList(){
   const files = wtFiles.map(f=> f.replace(/\.wt$/i, ""));
   const items = ["INIT"].concat(files).concat(wtUser.map(u=>u.n));
+  wtListItems = items; wtListFiles = wtFiles.slice();
   patchSel.innerHTML = "";
   items.forEach((t, i)=>{
     const o = document.createElement("option");
@@ -4351,20 +4363,22 @@ function renderWtPatchList(){
   });
   const idx = items.indexOf(slotName[wtPart]);
   patchSel.value = idx >= 0 ? idx : 0;
-  patchSel.onchange = async ()=>{
-    const i = +patchSel.value;
-    const nFiles = files.length;
-    if(i > 0 && i <= nFiles){
-      try{ await wtLoadFile(wtFiles[i-1]); }catch(e){}
-    } else {
-      const src = i === 0 ? JSON.parse(JSON.stringify(WT_DEF))
-                          : JSON.parse(JSON.stringify(wtUser[i-1-nFiles].p));
-      wtApply(src);
-    }
-    slotName[wtPart] = items[i];
-    paintSlots();
-    saveState();
-  };
+}
+
+/* picking a wavetable patch: a wave set loads its samples, a saved preset or INIT
+   just writes the parameters. It never changes the engine on its own. */
+async function wtPick(i){
+  const nFiles = wtListFiles.length;
+  if(i > 0 && i <= nFiles){
+    try{ await wtLoadFile(wtListFiles[i-1]); }catch(e){}
+  } else {
+    const src = i === 0 ? JSON.parse(JSON.stringify(WT_DEF))
+                        : JSON.parse(JSON.stringify((wtUser[i-1-nFiles] || {p:WT_DEF}).p));
+    wtApply(src);
+  }
+  slotName[wtPart] = wtListItems[i];
+  paintSlots();
+  saveState();
 }
 
 function renderPatchList(){
@@ -4395,7 +4409,10 @@ function selectPatch(i){
   paintSlots();
   renderPatch();
 }
-patchSel.onchange = ()=> selectPatch(+patchSel.value);
+patchSel.onchange = ()=>{
+  const i = +patchSel.value;
+  if(engWT) wtPick(i); else selectPatch(i);
+};
 document.getElementById("pprev").onclick=()=>{
   const n = Math.max(1, patches.length);
   selectPatch((patchIdx + n - 1) % n);
