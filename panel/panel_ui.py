@@ -3835,31 +3835,17 @@ function midiCents(ch){ return Math.round((midi.bend[ch] || 0) / 8192 * midiRang
 function midiStop(){
   midi.playing = false;
   if(midi.timer){ clearInterval(midi.timer); midi.timer = null; }
-  midi.held.forEach(h=> send("O " + h.n + " " + h.cents));
+  midi.held.forEach((h, k)=>{ send("O " + h.n + (h.cents ? " " + h.cents : "")); });
   midi.held.clear();
+  /* if the page stalled mid file, per note offs never went out: panic is the only
+     thing that guarantees silence */
   send("R");
-  midiLightAll(true);
   paintMidi();
-}
-/* two-part routing: the Pod's B part is a second patch and a second half of the
-   voice pool, so a bass channel can be a bass patch while the melody stays on A */
-const MIDI_PART_SPLIT = 55;      /* G3, for the by-register mode */
-function midiPartOf(e){
-  if(midi.partMode === "chan") return (e.ch >= 2) ? 1 : 0;
-  if(midi.partMode === "key")  return (e.n < MIDI_PART_SPLIT) ? 1 : 0;
-  return 0;
-}
-function midiPartLabel(){
-  return midi.partMode === "chan" ? "A: CH 0-1  B: CH 2-3"
-       : midi.partMode === "key"  ? "A ABOVE G3  B BELOW"
-       : "ALL PART A";
-}
-function midiPartCycle(){
-  midi.partMode = midi.partMode === "a" ? "chan" : midi.partMode === "chan" ? "key" : "a";
-  paintMidi();
+  paintGplay();
 }
 
 function midiTick(){
+  midi.lastTick = performance.now();
   if(!midi.playing) return;
   const now = performance.now() - midi.t0;
   while(midi.i < midi.evs.length && midi.evs[midi.i].ms <= now + 12){
@@ -3915,6 +3901,15 @@ function midiPlay(){
   midi.timer = setInterval(midiTick, 16);
   paintMidi();
 }
+setInterval(()=>{
+  /* the file player can be starved by a background window: if it has not ticked in
+     two seconds, stop it and silence the Pod rather than leave notes hanging */
+  if(midi.playing && midi.lastTick && performance.now() - midi.lastTick > 2000){
+    midiStop();
+    paintGplay();
+  }
+}, 1000);
+
 function paintMidi(){
   const b = document.getElementById("midiplay");
   if(!b) return;
