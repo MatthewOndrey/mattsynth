@@ -3804,6 +3804,18 @@ function buildMicro(){
   lp.onclick = ()=>{ midi.loop = !midi.loop; paintMidi(); };
   lp.classList.toggle("on", !!midi.loop);
   const st = document.createElement("span"); st.className = "lab"; st.id = "midistat";
+  const sp = document.createElement("input");
+  sp.type = "number"; sp.step = "0.01"; sp.min = "0.5"; sp.max = "1.5";
+  sp.value = (typeof micro.bassSpan === "number" ? micro.bassSpan : 1.2).toFixed(2);
+  sp.title = "bass span: 1.00 is chromatic, lower compresses, higher stretches";
+  sp.style.cssText = "width:62px; height:30px; background:#12181c; color:#e8fbff; border:1px solid #2a3238;" +
+    " border-radius:7px; text-align:center; font:600 13px system-ui;";
+  sp.onchange = ()=>{
+    const v = Math.max(0.5, Math.min(1.5, parseFloat(sp.value) || 1.2));
+    micro.bassSpan = Math.round(v * 100) / 100;
+    sp.value = micro.bassSpan.toFixed(2);
+    buildMicro(); saveState();
+  };
   const bo = document.createElement("button"); bo.className = "pbtn small"; bo.textContent = "B-";
   bo.title = "bass down a semitone";
   bo.onclick = ()=>{ micro.bassOfs = ((typeof micro.bassOfs === "number") ? micro.bassOfs : -8) - 1; buildMicro(); saveState(); };
@@ -3828,10 +3840,10 @@ function buildMicro(){
   sm.title = "move the split down";
   sm.onclick = ()=>{ micro.split = Math.max(24, (micro.split|0) - 1); paintMidi(); buildMicro(); saveState(); };
   const sl = document.createElement("span"); sl.className = "lab"; sl.id = "splitlab";
-  const sp = document.createElement("button"); sp.className = "pbtn small"; sp.textContent = "+";
-  sp.title = "move the split up";
-  sp.onclick = ()=>{ micro.split = Math.min(96, (micro.split|0) + 1); paintMidi(); buildMicro(); saveState(); };
-  bar.append(sel, ld, pl, pm, lp, bo, bu, drg, stg, sm, sl, sp, st);
+  const spl = document.createElement("button"); spl.className = "pbtn small"; spl.textContent = "+";
+  spl.title = "move the split up";
+  spl.onclick = ()=>{ micro.split = Math.min(96, (micro.split|0) + 1); paintMidi(); buildMicro(); saveState(); };
+  bar.append(sel, ld, pl, pm, lp, sp, bo, bu, drg, stg, sm, sl, st);
   refreshMidiLists().then(()=> paintMidi());
   const sz = document.createElement("button"); sz.className = "pbtn small";
   sz.textContent = micro.size === "small" ? "▦" : "▩"; sz.title = micro.size === "small" ? "small keys" : "big keys";
@@ -4149,7 +4161,7 @@ function hexGrid(container){
                by four thirds, so the span is expanded and the remainder goes out as
                pitch bend cents. Root unchanged. */
             const rootSent = 32;
-            const exact = rootSent + (4 / 3) * (want - 40);
+            const exact = rootSent + (typeof micro.bassSpan === "number" ? micro.bassSpan : 1.2) * (want - 40);
             fNote = Math.max(12, Math.min(120, Math.round(exact)));
             fCents = Math.round((exact - Math.round(exact)) * 100);
             fLab = NOTE[(want % 12 + 12) % 12];
@@ -4809,7 +4821,7 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs},
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
     gmode: transport.global,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
@@ -4902,6 +4914,7 @@ function applyState(s){
     if(typeof s.micro.dragOn === "boolean") micro.dragOn = s.micro.dragOn;
     if(typeof s.micro.splitMode === "string") micro.splitMode = s.micro.splitMode;
     if(typeof s.micro.bassOfs === "number") micro.bassOfs = s.micro.bassOfs;
+    if(typeof s.micro.bassSpan === "number") micro.bassSpan = s.micro.bassSpan;
     if([12,19,24,31].indexOf(s.micro.edo) >= 0) micro.edo = s.micro.edo;
     if(s.micro.layout === "hex" || s.micro.layout === "bosa") micro.layout = s.micro.layout;
     if(s.micro.size === "small" || s.micro.size === "big") micro.size = s.micro.size;
