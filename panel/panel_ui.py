@@ -67,6 +67,11 @@ WOLF = {"dev": None, "notes": {}, "path": "/dev/snd/midiC2D0", "span": 1.2, "roo
 def wolf_map(n):
     """the Wolf bass stretches pitch; map a true note onto what it will sound"""
     exact = WOLF["root"] + WOLF["span"] * (n - WOLF["rootnote"])
+    # the Wolf's bass will not speak below its lowest note, so lift whole octaves
+    while exact < 28.0:
+        exact += 12.0
+    while exact > 84.0:
+        exact -= 12.0
     note = int(round(exact))
     cents = int(round((exact - note) * 100))
     return max(0, min(127, note)), cents
@@ -162,7 +167,6 @@ def wolf_handle(body):
                 wolf_write([0x80 | ch, n, 0])
             wolf_write([0xB0 | ch, 123, 0])
             wolf_write([0xB0 | ch, 120, 0])
-        wolf_write([0xFC])   # transport stop, in case its own sequencer is running
         WOLF["notes"].clear()
         return False          # panic still goes to the Pod as well
     return False
