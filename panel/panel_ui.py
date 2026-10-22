@@ -4119,7 +4119,12 @@ function hexGrid(container){
             zone = 2; fNote = DRUMS[c]; fLab = DRUM_NAMES[c];
           } else {
             /* the rest of the bottom row is the bass, plain chromatic semitones */
-            zone = 3; fNote = Math.max(24, Math.min(96, 28 + (c - DRUMS.length))); fLab = NOTE[fNote % 12];
+            /* the Wolf's bass sits six semitones above the note it is sent, measured
+               against the board, so compensate and keep the label honest */
+            const want = 28 + (c - DRUMS.length);
+            zone = 3;
+            fNote = Math.max(12, Math.min(108, want + (typeof micro.bassShift === "number" ? micro.bassShift : -6)));
+            fLab = NOTE[(want % 12 + 12) % 12];
           }
         }
         const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone ? 0 : null));
