@@ -1044,8 +1044,11 @@ function buildKalimba(){
   const v=document.getElementById("view"); v.innerHTML="";
   const top=document.createElement("div"); top.className="row"; top.id="top";
   const bot=document.createElement("div"); bot.className="row"; bot.id="bot";
-  for(let i=6;i<13;i++) top.appendChild(makePad(i,"tine"));
-  for(let i=0;i<6;i++) bot.appendChild(makePad(i,"tine"));
+  /* the 14 inch panel has room for ten tines a row: twenty notes, nearly three
+     octaves of the scale, instead of the old thirteen */
+  const COLS = 10;
+  for(let i=COLS;i<COLS*2;i++) top.appendChild(makePad(i,"tine"));
+  for(let i=0;i<COLS;i++) bot.appendChild(makePad(i,"tine"));
   v.appendChild(top); v.appendChild(bot);
 }
 
