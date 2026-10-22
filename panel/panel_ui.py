@@ -62,7 +62,14 @@ def push(text):
 
 
 # --- Rhythm Wolf: parts C (drums) and D (its bass) over USB MIDI ---------------
-WOLF = {"dev": None, "notes": {}, "path": "/dev/snd/midiC2D0"}
+WOLF = {"dev": None, "notes": {}, "path": "/dev/snd/midiC2D0", "span": 1.2, "root": 32, "rootnote": 40}
+
+def wolf_map(n):
+    """the Wolf bass stretches pitch; map a true note onto what it will sound"""
+    exact = WOLF["root"] + WOLF["span"] * (n - WOLF["rootnote"])
+    note = int(round(exact))
+    cents = int(round((exact - note) * 100))
+    return max(0, min(127, note)), cents
 
 def wolf_open():
     if WOLF["dev"] is None:
@@ -102,10 +109,9 @@ def wolf_handle(body):
             p = 0
         if p >= 2:
             ch = 9 if p == 2 else 0
-            try:
-                cents = float(parts[4]) if len(parts) > 4 else 0.0
-            except ValueError:
-                cents = 0.0
+            cents = 0.0
+            if p == 3:
+                n, cents = wolf_map(n)
             if p == 3 and cents:
                 v14 = int(round(max(-200.0, min(200.0, cents)) / 200.0 * 8192)) + 8192
                 wolf_write([0xE0 | ch, v14 & 0x7F, (v14 >> 7) & 0x7F])
@@ -3817,6 +3823,7 @@ function buildMicro(){
     const v = Math.max(0.5, Math.min(1.5, parseFloat(sp.value) || 1.2));
     micro.bassSpan = Math.round(v * 100) / 100;
     sp.value = micro.bassSpan.toFixed(2);
+    fetch("/wolf/span", {method:"POST", body:String(micro.bassSpan)}).catch(()=>{});
     buildMicro(); saveState();
   };
   const bo = document.createElement("button"); bo.className = "pbtn small"; bo.textContent = "B-";
@@ -3983,9 +3990,10 @@ const MIDI_PART_SPLIT = 55;   /* G3, the default split */
 function midiPartOf(e){
   if(midi.partMode === "abcd"){
     /* four way: drums to the Wolf, bass to the Pod's part B, the rest split by channel */
-    if((e.ch | 0) === 9) return 2;
-    if((e.ch | 0) === 2) return 1;
-    return 0;
+    if((e.ch | 0) === 9) return 2;     /* drums  C */
+    if((e.ch | 0) === 2) return 3;     /* bass   D, the Wolf's own synth */
+    if((e.ch | 0) === 1) return 1;     /* lead   B */
+    return 0;                          /* rhythm A */
   }
   if(midi.partMode === "chan") return ((e.ch | 0) >= 2) ? 1 : 0;
   if(midi.partMode === "key")  return ((e.n | 0) < (midi.partSplit | 0)) ? 1 : 0;
@@ -3995,11 +4003,11 @@ function midiPartLabel(){
   /* short, so the button stays the size of its neighbours */
   if(midi.partMode === "chan") return "BY CH";
   if(midi.partMode === "key")  return "BY KEY";
-  if(midi.partMode === "abcd") return "A|B|C|D";
+  if(midi.partMode === "abcd") return "RHY|LEAD|DRM|BASS";
   return "ALL A";
 }
 function midiPartTitle(){
-  if(midi.partMode === "abcd") return "drums to C, bass to B, the rest to A";
+  if(midi.partMode === "abcd") return "rhythm A, lead B, drums C, bass D";
   if(midi.partMode === "chan") return "files route by channel: A on 0-1, B on 2-3";
   if(midi.partMode === "key")  return "files route by register: A above " +
     NOTE[(midi.partSplit|0) % 12] + (Math.floor((midi.partSplit|0)/12)-1) + ", B below";
@@ -4168,13 +4176,8 @@ function hexGrid(container){
             /* back on the Wolf, as asked. Its bass stretches pitch, so the row is a
                near chromatic approximation rather than exact; the offset below was
                measured against the board. */
-            /* the root sits where it sounds right; the Wolf stretches everything above it
-               by four thirds, so the span is expanded and the remainder goes out as
-               pitch bend cents. Root unchanged. */
-            const rootSent = 32;
-            const exact = rootSent + (typeof micro.bassSpan === "number" ? micro.bassSpan : 1.2) * (want - 40);
-            fNote = Math.max(12, Math.min(120, Math.round(exact)));
-            fCents = Math.round((exact - Math.round(exact)) * 100);
+            /* send the true note; the server maps it onto the Wolf's stretched pitch */
+            fNote = Math.max(12, Math.min(120, want));
             fLab = NOTE[(want % 12 + 12) % 12];
           }
         }
@@ -5242,7 +5245,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if path == "/send" and body:
+        if path == "/wolf/span" and body:
+            try:
+                WOLF["span"] = max(0.5, min(1.5, float(body)))
+            except ValueError:
+                pass
+            self.send_response(204); self.send_header("Content-Length", "0"); self.end_headers()
+        elif path == "/send" and body:
             try:
                 open("/tmp/frames.log", "a").write(body + chr(10))
             except Exception:
