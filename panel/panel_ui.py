@@ -110,6 +110,9 @@ def wolf_handle(body):
                 v14 = int(round(max(-200.0, min(200.0, cents)) / 200.0 * 8192)) + 8192
                 wolf_write([0xE0 | ch, v14 & 0x7F, (v14 >> 7) & 0x7F])
             wolf_write([0x90 | ch, n & 127, v])
+            if p == 2:
+                # the Wolf's bass follows drum notes on channel 10; cut it straight after
+                wolf_write([0xB0, 123, 0])
             WOLF["notes"][(p, n)] = True
             return True
         return False
