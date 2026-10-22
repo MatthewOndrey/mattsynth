@@ -4105,13 +4105,20 @@ function hexGrid(container){
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
       for(let c = 0; c < COLS; c++){
-        const DRUMS = [36, 38, 42, 46, 39, 45, 47, 50, 56, 75];
-        const DRUM_NAMES = ["KICK", "SNR", "CHH", "OHH", "CLP", "TOM1", "TOM2", "TOM3", "COW", "CLV"];
+        const DRUMS = [36, 38, 40, 42, 44];
+        const DRUM_NAMES = ["KICK", "SNR", "PERC", "CHH", "OHH"];
         const rUp = ROWS - 1 - r;                 /* 0 is the bottom row */
         let zone = 0;
         let fNote = null, fLab = null;
         if(micro.splitMode === "abcd"){
-          if(rUp === 0){ zone = 2; const di = c % DRUMS.length; fNote = DRUMS[di]; fLab = DRUM_NAMES[di]; }
+          if(rUp === 0){
+            /* one block per drum voice, not the same ten names repeated along the row */
+            zone = 2;
+            const wid = Math.max(1, Math.floor(COLS / DRUMS.length));
+            const di = Math.min(DRUMS.length - 1, Math.floor(c / wid));
+            fNote = DRUMS[di];
+            fLab = (c % wid === Math.floor(wid / 2)) ? DRUM_NAMES[di] : "";
+          }
           else if(rUp === 1){ zone = 3; }
           else { zone = 0; }
         }
