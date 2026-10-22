@@ -61,6 +61,69 @@ def push(text):
                 pass
 
 
+# --- Rhythm Wolf: parts C (drums) and D (its bass) over USB MIDI ---------------
+WOLF = {"dev": None, "notes": {}, "path": "/dev/snd/midiC2D0"}
+
+def wolf_open():
+    if WOLF["dev"] is None:
+        try:
+            WOLF["dev"] = open(WOLF["path"], "wb", buffering=0)
+        except Exception:
+            WOLF["dev"] = False
+    return WOLF["dev"] or None
+
+def wolf_write(bs):
+    d = wolf_open()
+    if not d:
+        return
+    try:
+        d.write(bytes(bs))
+        try:
+            open("/tmp/wolf.log", "a").write(" ".join("%02X" % b for b in bs) + chr(10))
+        except Exception:
+            pass
+    except Exception:
+        WOLF["dev"] = None
+
+def wolf_handle(body):
+    """True when the frame was consumed by the Wolf (part C drums, part D bass)"""
+    parts = body.split()
+    if not parts:
+        return False
+    cmd = parts[0]
+    if cmd == "N" and len(parts) >= 3:
+        try:
+            n = int(parts[1]); v = max(1, min(127, int(float(parts[2]))))
+        except ValueError:
+            return False
+        try:
+            p = int(parts[3]) if len(parts) > 3 else 0
+        except ValueError:
+            p = 0
+        if p >= 2:
+            ch = 9 if p == 2 else 0
+            wolf_write([0x90 | ch, n & 127, v])
+            WOLF["notes"][(p, n)] = True
+            return True
+        return False
+    if cmd == "O" and len(parts) >= 2:
+        try:
+            n = int(parts[1])
+        except ValueError:
+            return False
+        for p in (2, 3):
+            if WOLF["notes"].pop((p, n), None):
+                wolf_write([0x80 | (9 if p == 2 else 0), n & 127, 0])
+                return True
+        return False
+    if cmd == "R":
+        for ch in (0, 9):
+            wolf_write([0xB0 | ch, 123, 0])
+        WOLF["notes"].clear()
+        return False          # panic still goes to the Pod as well
+    return False
+
+
 def send_body(body):
     cs = 0
     raw = body.encode()
@@ -582,7 +645,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
     <div class="stat" id="voices">-</div>
     <div class="stat" id="cpu">-</div>
     <div class="stat" id="fingers">0 fingers</div>
-    <div id="abslots">
+    <div id="partcd">
+    <button class="slot" id="partC" title="Rhythm Wolf drums">C: drums</button>
+    <button class="slot" id="partD" title="Rhythm Wolf bass">D: bass</button>
+  </div>
+  <div id="abslots">
       <button class="slot" id="slotA" data-p="0">A: init</button>
       <button class="slot" id="slotB" data-p="1">B: init</button>
     </div>
@@ -803,11 +870,14 @@ let part = 0;   /* which timbre the pads, roll and edit verbs act on */
 const fingers = new Map();   // pointerId -> the exact notes that finger started
 
 function setPart(p){
-  part = p ? 1 : 0;
-  send("P 17 " + part);
+  part = p | 0;
+  if(part < 2) send("P 17 " + part);   /* C and D live on the Wolf, not the Pod */
   const a = document.getElementById("partA"), b = document.getElementById("partB");
   if(a) a.classList.toggle("on", part === 0);
   if(b) b.classList.toggle("on", part === 1);
+  const c = document.getElementById("partC"), d = document.getElementById("partD");
+  if(c) c.classList.toggle("on", part === 2);
+  if(d) d.classList.toggle("on", part === 3);
 }
 
 function send(body){
@@ -4449,6 +4519,8 @@ function paintSlots(){
     b.classList.toggle("on", p === wtPart);
   });
 }
+document.getElementById("partC").onclick = ()=> setPart(2);
+document.getElementById("partD").onclick = ()=> setPart(3);
 document.querySelectorAll("#abslots .slot").forEach(b=>{
   b.onclick = ()=>{
     wtPart = +b.dataset.p;
@@ -5079,7 +5151,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 open("/tmp/frames.log", "a").write(body + chr(10))
             except Exception:
                 pass
-            send_body(body)
+            if not wolf_handle(body):
+                send_body(body)
             self.send_response(204)
             self.send_header("Content-Length", "0")
             self.end_headers()
