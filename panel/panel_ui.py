@@ -463,7 +463,7 @@ button.onhold { background:#2f6b3a !important; color:#fff !important; }
 .gmrow { display:flex; align-items:center; gap:10px; }
 .gmrow label { flex:1; }
 .pbtn.small { padding:6px 8px; font-size:14px; width:44px; min-width:44px; text-align:center; }
-#midipart { width:118px; min-width:118px; }
+#midipart { width:74px; min-width:74px; }
 #ksplit   { width:74px;  min-width:74px; }
 #dragmode { width:44px;  min-width:44px; }
 #gplay    { width:74px;  min-width:74px; }
@@ -3867,9 +3867,16 @@ function midiPartOf(e){
   return 0;
 }
 function midiPartLabel(){
-  if(midi.partMode === "chan") return "A: CH 0-1  B: CH 2-3";
-  if(midi.partMode === "key")  return "A ABOVE " + NOTE[(midi.partSplit|0) % 12] + (Math.floor((midi.partSplit|0)/12)-1) + "  B BELOW";
-  return "ALL PART A";
+  /* short, so the button stays the size of its neighbours */
+  if(midi.partMode === "chan") return "BY CH";
+  if(midi.partMode === "key")  return "BY KEY";
+  return "ALL A";
+}
+function midiPartTitle(){
+  if(midi.partMode === "chan") return "files route by channel: A on 0-1, B on 2-3";
+  if(midi.partMode === "key")  return "files route by register: A above " +
+    NOTE[(midi.partSplit|0) % 12] + (Math.floor((midi.partSplit|0)/12)-1) + ", B below";
+  return "every file note plays part A";
 }
 function midiPartCycle(){
   const modes = ["a", "chan", "key"];
@@ -3967,7 +3974,8 @@ function paintMidi(){
   const lp = document.getElementById("midiloop");
   if(lp) lp.classList.toggle("on", !!midi.loop);
   const pm = document.getElementById("midipart");
-  if(pm){ pm.textContent = midiPartLabel(); pm.classList.toggle("on", midi.partMode !== "a"); }
+  if(pm){ pm.textContent = midiPartLabel(); pm.title = midiPartTitle();
+          pm.classList.toggle("on", midi.partMode !== "a"); }
   const sl = document.getElementById("splitlab");
   if(sl){
     const n = micro.split | 0;
