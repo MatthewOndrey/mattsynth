@@ -143,7 +143,11 @@ def wolf_handle(body):
         except ValueError:
             return False
         for p in (2, 3):
-            if WOLF["notes"].pop((p, n), None):
+            # part D notes are stored after the pitch map, so try both forms
+            key = (p, n)
+            if key not in WOLF["notes"] and p == 3:
+                key = (p, wolf_map(n)[0])
+            if WOLF["notes"].pop(key, None):
                 wolf_write([0x80 | (9 if p == 2 else 0), n & 127, 0])
                 if p == 3:
                     wolf_write([0xE0, 0, 64])
