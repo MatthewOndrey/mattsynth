@@ -4127,16 +4127,16 @@ function hexGrid(container){
             /* the Wolf's bass tracks pitch badly: measured, note 28 sounds as 34 and 34
                sounds as 42, so it is not an offset but a scale of four thirds. Invert
                that so the key's label is the pitch you actually hear. */
-            /* the Wolf cannot play a chromatic scale: measured, it stretches pitch by
-               four thirds, so adjacent semitones collapse onto the same note. The bass
-               row therefore plays the Pod, which is exact, and the Wolf keeps the drums. */
-            fNote = Math.max(12, Math.min(120, want));
+            /* back on the Wolf, as asked. Its bass stretches pitch, so the row is a
+               near chromatic approximation rather than exact; the offset below was
+               measured against the board. */
+            const shift = (typeof micro.bassShift === "number" ? micro.bassShift : -6);
+            fNote = Math.max(12, Math.min(120, want + shift));
             fLab = NOTE[(want % 12 + 12) % 12];
           }
         }
         const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone ? 0 : null));
         k.dataset.zone = zone;
-        if(zone === 3) k.dataset.part = "1";
         k.style.width = w + "px";
         k.style.height = h + "px";
         k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
