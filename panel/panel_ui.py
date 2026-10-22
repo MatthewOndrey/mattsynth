@@ -3832,6 +3832,28 @@ function midiLight(note, cents, on){
 }
 function midiRange(ch){ return midi.range[ch] === undefined ? 2 : midi.range[ch]; }
 function midiCents(ch){ return Math.round((midi.bend[ch] || 0) / 8192 * midiRange(ch) * 100); }
+/* two part routing for files: everything on A, or split by channel, or by register */
+const MIDI_PART_SPLIT = 55;   /* G3 */
+function midiPartOf(e){
+  if(midi.partMode === "chan") return ((e.ch | 0) >= 2) ? 1 : 0;
+  if(midi.partMode === "key")  return ((e.n | 0) < MIDI_PART_SPLIT) ? 1 : 0;
+  return 0;
+}
+function midiPartLabel(){
+  if(midi.partMode === "chan") return "A: CH 0-1  B: CH 2-3";
+  if(midi.partMode === "key")  return "A ABOVE G3  B BELOW";
+  return "ALL PART A";
+}
+function midiPartCycle(){
+  const modes = ["a", "chan", "key"];
+  const i = Math.max(0, modes.indexOf(midi.partMode || "a"));
+  midi.partMode = modes[(i + 1) % modes.length];
+  const b = document.getElementById("midipart");
+  if(b){ b.textContent = midiPartLabel(); b.classList.toggle("on", midi.partMode !== "a"); }
+  saveState();
+  return midi.partMode;
+}
+
 function midiStop(){
   midi.playing = false;
   if(midi.timer){ clearInterval(midi.timer); midi.timer = null; }
