@@ -1,46 +1,103 @@
 # MattSynth
 
-A two-part FM and wavetable synth: Daisy Pod does the audio, a Raspberry Pi 400 runs
-the touch panel and serves it to a kiosk Chromium on a 15 inch screen.
+A two-part FM and wavetable synthesiser with a 14 inch touch panel, an analogue drum
+machine on the same musical clock, and a microtonal keyboard you can split across four
+instruments.
 
-## Layout
+The Daisy Pod does the audio, a Raspberry Pi serves the interface to a kiosk Chromium, and
+an Akai Rhythm Wolf adds analogue drums and bass over USB MIDI.
 
-    firmware/daisy-pod   Pod firmware: CDC protocol, FM engine, wavetable engine
-    panel/panel_ui.py    the whole UI: HTTP, SSE, state, every tab
-    panel/systemd        panel-ui, kiosk, podbridge units
-    tools                composition scripts and flash helpers
-    docs                 protocol and patch map
+![The wavetable tab](docs/images/wt.png)
 
-## Signal path
+## What is in the box
 
-    browser (kiosk, 1920x1080)  ->  HTTP/SSE on the Pi
-    Pi  ->  podbridge (TCP 5555)  ->  USB CDC  ->  Daisy Pod
+    Daisy Pod            6 operator FM, 8 frame wavetable engine, 12 voices, two parts
+    Raspberry Pi 400     runs the panel and the USB bridges
+    Caperave 15" panel   touch, 1920x1080, driven by kiosk Chromium
+    Akai Rhythm Wolf     analogue drums on part C, its bass synth on part D
 
-Wire frames are `'@' <body> '*' <XOR hex> '\n'`. Every parameter is an integer.
+## Screenshots
 
-## Engines
+| | |
+|---|---|
+| ![Kalimba](docs/images/kali.png) **Kalimba** two staggered rows of fat tines, velocity from where the finger lands | ![Microtonal](docs/images/micro.png) **Microtonal** Lumatone style honeycomb, 12 to 31 EDO, four instrument zones |
+| ![Operators](docs/images/ops.png) **Operators** six operators, envelopes, routing, per operator detail with draggable handles | ![Drone](docs/images/drone.png) **Drone** three LFO bay with stones, feedback and per LFO targets |
 
-FM is a six operator DX7 class engine, 32 algorithms, 155 byte packed patch, two
-parts sharing one voice pool. WT is eight additive frames of 512 samples morphing
-per voice, four stage envelope, 60 cents detune, sharing the same filter, chorus,
-delay, pan and voice pool. `P 28` switches engines at runtime, no reflash.
+## Features
 
-## Modulation
+**Engines.** A DX7 class six operator FM engine with 32 algorithms and 155 byte packed
+voices, and a wavetable engine with eight additive frames, per voice morph, four stage
+envelope and detune. `P 28` switches between them at runtime, both share the filter,
+chorus, delay, pan and voice pool, so the switch costs nothing.
 
-Three LFOs per part, each with a 14 entry amount matrix, so one LFO can drive
-several knobs with separate depths. Continuous destinations (FRAME, MORPH TO,
-DETUNE, LEVEL) are summed per sample; envelope destinations are sampled at
-note-on. `M <part> <lfo> <dest> <amount>` writes a cell.
+**Microtonal.** 12, 19, 24 and 31 EDO, a honeycomb keyboard with per key cents, chord
+tones lit, press glow, glissando drag mode, and a keyboard split into four zones.
 
-## Flashing
+**Modulation.** Three LFOs per part with a 14 destination amount matrix. One LFO can drive
+FRAME, MORPH TO and DETUNE at once with separate depths, and every knob draws a band per
+source with a live marker riding that band.
 
-The app can reboot itself into the STM bootloader with the `Z` verb, then:
+**Drums and bass.** The Rhythm Wolf is part C on channel 10 and its bass is part D on
+channel 1. MIDI files can drive all four parts: channel 0 rhythm, 1 lead, 9 drums,
+2 bass.
 
+**Files.** A built in MIDI player with two part routing, loop, microtonal cents per note
+and the whole arrangement clocked from the panel transport.
+
+## How it fits together
+
+```
+   touch panel (1920x1080)          Raspberry Pi                    instruments
+  +----------------------+      +------------------+          +--------------------+
+  |  kiosk Chromium      | <--> |  panel_ui.py     |  USB CDC |  Daisy Pod          |
+  |  HTML, canvas, JS    |  ws  |  HTTP + WS + SSE | -------> |  FM and wavetable   |
+  +----------------------+      |                  |          +--------------------+
+                                |  podbridge       |          +--------------------+
+                                |  rawmidi         |  USB MIDI|  Rhythm Wolf        |
+                                +------------------+ -------> |  drums and bass     |
+                                                              +--------------------+
+```
+
+Notes are integers over a framed link, `@body*checksum`, so nothing floats on the wire.
+State lives in `panel_state.json` on the Pi and is restored on boot, including the bank,
+the wave set and the file you had loaded.
+
+## Getting started
+
+Firmware:
+
+    cd firmware/daisy-pod
+    make
     dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D build/PanelLink.bin
 
-## Running the panel
+The app can reboot itself into the bootloader with the `Z` verb, so no BOOT press is
+needed after the first flash.
 
-    sudo systemctl restart panel-ui     # serves :8080
-    sudo systemctl restart kiosk        # Chromium on HDMI-A-2
+Panel:
 
-State lives in `/home/matto/panel_state.json` and is saved on change.
+    python3 panel/panel_ui.py          # serves http://<pi>:8080
+    kiosk                              # Chromium on the panel, see panel/systemd
+
+Both run as systemd units, see `panel/systemd`.
+
+## Repository layout
+
+    firmware/daisy-pod   PanelLink.cpp, FmEngine.h, WtEngine.h, Makefile
+    panel/panel_ui.py    the entire UI and both bridges
+    panel/systemd        panel-ui, kiosk, podbridge
+    tools/               composition scripts, wave set generator, flash helpers
+    docs/PROTOCOL.md     the wire protocol and the modulation matrix
+    docs/images          screenshots
+
+## Status
+
+Working: FM and wavetable engines, two part multitimbral, three LFOs with a modulation
+matrix, microtonal honeycomb with four zones, MIDI player, Rhythm Wolf integration, MIDI
+over a websocket transport, banks and wavetable sets.
+
+Next: operator level scaling curves, a real FFT band limit for loaded wave sets, and an
+arrangement view for the sequencer.
+
+## Licence
+
+MIT, see LICENSE.
