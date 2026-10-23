@@ -338,7 +338,7 @@ body.fxoff #fx { display:none; }
                 border-radius:9px; padding:9px 15px; font-size:14px; letter-spacing:.5px; }
 #views button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
 #view { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; }
-/* one finger must never be cancelled by the browser when a second lands */
+/* one finger must never be canceled by the browser when a second lands */
 #stage, #view, #chroma, #grid, #kali, #drone, #dfield, #top, #bot { touch-action:none; }
 .pad, .tine, .dstone, .dvh { touch-action:none; }
 .row { display:flex; gap:10px; }
@@ -778,7 +778,7 @@ const DIVB = [0.25,1/3,0.5,2/3,1,4/3,2,4];
 /* ---------------------------------------------------------------- knobs --- */
 /* The right column is a bank of synth knobs. Each one keeps a hidden range
    input with the old id, so every handler and every P send still works; the
-   coloured arc is just a readout of that input's value. */
+   colored arc is just a readout of that input's value. */
 const FXK = [
   {id:"p0",  lab:"CUTOFF",    min:0,  max:1000, def:350, rng:true},
   {id:"p1",  lab:"RESONANCE", min:0,  max:1000, def:550, rng:true},
@@ -2203,15 +2203,15 @@ function drawOpEnv(){
   const g = envPoints();
   if(!g) return;
   const {pts, W, H, pad} = g;
-  const colour = isCarrierOp(opDetail) ? "#7fd18b" : "#e0a458";
+  const color = isCarrierOp(opDetail) ? "#7fd18b" : "#e0a458";
   let out = '<svg width="100%" height="100%" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">';
   out += '<line x1="' + pad + '" y1="' + (H - pad) + '" x2="' + (W - pad) + '" y2="' + (H - pad) + '" stroke="#2e2e2e"/>';
   out += '<line x1="' + pad + '" y1="' + pad + '" x2="' + pad + '" y2="' + (H - pad) + '" stroke="#2e2e2e"/>';
   out += '<polyline points="' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') +
-         '" fill="none" stroke="' + colour + '" stroke-width="3"/>';
+         '" fill="none" stroke="' + color + '" stroke-width="3"/>';
   pts.slice(1).forEach((p, i)=>{
     out += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="13" fill="#141414" stroke="' +
-           colour + '" stroke-width="3" data-lv="' + i + '" style="cursor:ns-resize"/>';
+           color + '" stroke-width="3" data-lv="' + i + '" style="cursor:ns-resize"/>';
     out += '<text x="' + (p[0] + 20).toFixed(1) + '" y="' + (p[1] + 6).toFixed(1) +
            '" fill="#9a9a9a" font-size="15">L' + (i + 1) + ' ' + opVals[opDetail][4 + i] + '</text>';
   });
@@ -2988,7 +2988,7 @@ function clipPlayhead(s){
 
 /* ---------------------------------------------------------------- chroma -- */
 /* A chromatic player: twelve columns, four octaves, no scale locking. The pads
-   are coloured by the chord you have chosen, so the root, third, fifth and
+   are colored by the chord you have chosen, so the root, third, fifth and
    seventh read at a glance and the notes outside the key fade into the floor. */
 const CHORD_Q = [[0,4,7], [0,3,7], [0,4,7,10], [0,4,7,11], [0,3,7,10], [0,5,7], [0,3,6]];
 
@@ -3100,10 +3100,10 @@ const drone = {
 let dronePaint = null;   /* buildDrone hands the field's paint() up here */
 
 /* operator wide sends: the S verb takes (operator, logical param, value) */
-function sFan(param, amt, centre, lo, hi){
+function sFan(param, amt, center, lo, hi){
   for(let o = 0; o < 6; o++){
     const f = (o - 2.5) / 2.5;
-    const v = Math.round(Math.max(lo, Math.min(hi, centre + amt * f)));
+    const v = Math.round(Math.max(lo, Math.min(hi, center + amt * f)));
     send("S " + o + " " + param + " " + v);
   }
 }
@@ -3198,7 +3198,7 @@ function drPaint(p, v){
   if(!p.el) return;
   const f = Math.max(0, Math.min(1, (v - p.lo) / Math.max(1, p.hi - p.lo)));
   let base = 0, pc = f * 100;
-  if(p.bi){                       /* pitch faders grow out of the centre */
+  if(p.bi){                       /* pitch faders grow out of the center */
     base = Math.min(f, 0.5) * 100;
     pc   = Math.abs(f - 0.5) * 100;
   }
@@ -3756,7 +3756,7 @@ const EDO_CFG = {
    octaves of inaudible squeak at the right hand edge.
    hex  : right = one EDO step, up = the EDO's major third  (Lumatone-like)
    bosa : right = the fifth, up = the third                 (Bosanquet chain of fifths)
-   Both are centred on C4 so the board sits in a playable register. */
+   Both are centerd on C4 so the board sits in a playable register. */
 function microCents(c, r, cols, rows){
   const cfg = EDO_CFG[micro.edo];
   const stepX = micro.layout === "hex" ? 1 : cfg.g;
@@ -4053,7 +4053,7 @@ function midiPartOf(e){
   return 0;
 }
 function midiPartLabel(){
-  /* short, so the button stays the size of its neighbours */
+  /* short, so the button stays the size of its neighbors */
   if(midi.partMode === "chan") return "BY CH";
   if(midi.partMode === "key")  return "BY KEY";
   if(midi.partMode === "abcd") return "RHY|LEAD|DRM|BASS";
@@ -4328,7 +4328,7 @@ function showFingers(){
   document.getElementById("fingers").textContent = fingers.size + " fingers" + (chord ? " · " + nn + " notes" : "");
 }
 
-/* a bend leaves a comet trail: colour runs cyan at full flat to red at full sharp */
+/* a bend leaves a comet trail: color runs cyan at full flat to red at full sharp */
 let lastTrail = 0;
 function bendTrail(x, y, cents, range){
   if(x === undefined || y === undefined) return;

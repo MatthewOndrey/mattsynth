@@ -49,7 +49,7 @@ def morph(a, b, steps=8, tilt=1.0):
         out.append(frame(h, phase_shift=0.0, tilt=tilt))
     return out
 
-# 1 warm analogue: sine through to a soft saw, all harmonics rolled off above 24
+# 1 warm analog: sine through to a soft saw, all harmonics rolled off above 24
 warm_a = [1.0] + [0.0] * 63
 warm_b = [1.0] + [1.0 / h for h in range(2, 25)] + [0.0] * 39
 save("clean-warm", morph(warm_a, warm_b, tilt=0.85))

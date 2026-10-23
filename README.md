@@ -1,11 +1,11 @@
 # MattSynth
 
-A two-part FM and wavetable synthesiser with a 14 inch touch panel, an analogue drum
+A two-part FM and wavetable synthesizer with a 14 inch touch panel, an analog drum
 machine on the same musical clock, and a microtonal keyboard you can split across four
 instruments.
 
 The Daisy Pod does the audio, a Raspberry Pi serves the interface to a kiosk Chromium, and
-an Akai Rhythm Wolf adds analogue drums and bass over USB MIDI.
+an Akai Rhythm Wolf adds analog drums and bass over USB MIDI.
 
 ![The wavetable tab](docs/images/wt.png)
 
@@ -14,7 +14,7 @@ an Akai Rhythm Wolf adds analogue drums and bass over USB MIDI.
     Daisy Pod            6 operator FM, 8 frame wavetable engine, 12 voices, two parts
     Raspberry Pi 400     runs the panel and the USB bridges
     Caperave 15" panel   touch, 1920x1080, driven by kiosk Chromium
-    Akai Rhythm Wolf     analogue drums on part C, its bass synth on part D
+    Akai Rhythm Wolf     analog drums on part C, its bass synth on part D
 
 ## Screenshots
 
@@ -98,6 +98,6 @@ over a websocket transport, banks and wavetable sets.
 Next: operator level scaling curves, a real FFT band limit for loaded wave sets, and an
 arrangement view for the sequencer.
 
-## Licence
+## License
 
 MIT, see LICENSE.

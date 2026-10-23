@@ -2,7 +2,7 @@
 //
 // Eight frames of 512 samples, built at boot by additive synthesis, held in SDRAM
 // (the .bss here lands in the 64 MB region, not the 128 KB flash). A voice reads two
-// neighbouring frames and crossfades, so FRAME is a continuous morph rather than a
+// neighboring frames and crossfades, so FRAME is a continuous morph rather than a
 // stepped switch. Everything downstream, the ladder filter, chorus, delay and the
 // voice accounting, stays in PanelLink.cpp and is shared with the FM engine.
 #pragma once
@@ -44,10 +44,10 @@ struct Params
     };
     Lfo lfo[3];
     float lfoPh[3] = {0, 0, 0};   /* block-rate phase, used to sample envelope targets */
-    float pan = 0.0f;            /* -1 left, 0 centre, +1 right */
+    float pan = 0.0f;            /* -1 left, 0 center, +1 right */
 
     /* per note shaping: a frame envelope, and two ways a note can sit further
-       along the table than its neighbours */
+       along the table than its neighbors */
     float envAmt   = 0.0f;  /* frames of offset at note-on, decays to zero */
     float envTime  = 0.2f;  /* seconds to get there */
     float velFrame = 0.0f;  /* 0..1, louder notes start brighter */
@@ -123,7 +123,7 @@ class Engine
     }
 
     /* a loaded single cycle is raw: no band limit, so the top octaves fold harmonics
-       back as inharmonic tones. Normalise it, then derive two duller copies with a
+       back as inharmonic tones. Normalize it, then derive two duller copies with a
        three tap binomial, and pick the copy from the note pitch while playing. */
     void FinishFrame(int f)
     {

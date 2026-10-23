@@ -82,7 +82,7 @@ BAR = DIV * 4
 STEP = DIV // 2          # one 8th, the motor runs on eighths here
 
 s = Song()
-T1 = T(31, "D")          # 31-EDO: pure fifths, 7-limit colour
+T1 = T(31, "D")          # 31-EDO: pure fifths, 7-limit color
 
 def bass_motor(bar, tok, vel=86):
     # half notes: the motor still churns, but each note is not another tail in

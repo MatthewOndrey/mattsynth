@@ -72,7 +72,7 @@ def stab(bar, tok, when=(0, 1.5, 2.5), vel=86, octave=4):
 def pad(bar, tok, vel=58, octave=4, bars=2):
     base = T.root_cents(tok, octave)
     for deg in T.chord(tok)[1][:2]:
-        s.note(bar * BB, bars * BB - 60, base + T.c(deg), vel, 1)  # 31-EDO colour
+        s.note(bar * BB, bars * BB - 60, base + T.c(deg), vel, 1)  # 31-EDO color
 
 def cluster(bar, vel=46, octave=5):
     """Aphex interlude: stacked microtonal seconds that beat against each other."""

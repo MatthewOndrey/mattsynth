@@ -187,7 +187,7 @@ def quarter_light():
     s = Song()
     A = ["I", "ivm", "bIIIM", "bVIIM"]            # Modal/B - I ivm bIIIM bVIIM
     B = ["im", "bIIM", "bVIIM", "vm"]
-    # quarter-tone neighbours: the m2 is exactly one 24-EDO step
+    # quarter-tone neighbors: the m2 is exactly one 24-EDO step
     motif = [(0, .5, 0, True, None), (.5, .5, 1, False, None), (1, .5, 2, False, 25),
              (1.5, 1, 3, True, None), (3, .5, 2, False, None), (3.5, .5, 1, False, -25)]
     s.note(0, BB - 30, T.root_cents("I", 2), 46, 2)
