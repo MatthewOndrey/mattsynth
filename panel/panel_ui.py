@@ -916,7 +916,7 @@ let bendRange=1200;   /* cents at full deflection, set by the BEND knob */
 let chordN=3;         /* how many notes a pad plays with CHORD on, set by the CHORD knob */
 let chordSpace=1;     /* multiplies the chord type gaps: maj 0-2-4 at 2 becomes 0-4-8 */
 /* microtonal player: EDO, layout and root */
-const micro = { edo:24, layout:"bosa", root:0, size:"big", gapX:4, gapY:4, tilt:15, ksize:100 };
+const micro = { edo:24, layout:"bosa", root:0, size:"big", gapX:4, gapY:4, tilt:16, ksize:100 };
 let fxHidden = false;   /* the right column can collapse so a player gets the width */
 let part = 0;   /* which timbre the pads, roll and edit verbs act on */
 const fingers = new Map();   // pointerId -> the exact notes that finger started
@@ -4232,7 +4232,7 @@ function hexGrid(container){
     const SIZES = [[0,2],[0,5],[0,8],[0,11],[0,14],[0,17],[0,20],[0,23],[0,26],
                    [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]];
     const ROWS = SIZES.length, MAXC = 30;
-    const TILT = Math.max(-20, Math.min(20, (typeof micro.tilt === "number" ? micro.tilt : 15)));
+    const TILT = Math.max(-20, Math.min(20, (typeof micro.tilt === "number" ? micro.tilt : 16)));
     const GX = Math.max(0, micro.gapX | 0), GY = Math.max(0, micro.gapY | 0);
 
     /* largest key that still fits with the chosen spacing; SIZE trims down from it */
