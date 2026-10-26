@@ -916,7 +916,7 @@ let bendRange=1200;   /* cents at full deflection, set by the BEND knob */
 let chordN=3;         /* how many notes a pad plays with CHORD on, set by the CHORD knob */
 let chordSpace=1;     /* multiplies the chord type gaps: maj 0-2-4 at 2 becomes 0-4-8 */
 /* microtonal player: EDO, layout and root */
-const micro = { edo:24, layout:"bosa", root:0, size:"big" };
+const micro = { edo:24, layout:"bosa", root:0, size:"big", gap:4, tilt:7, ksize:100 };
 let fxHidden = false;   /* the right column can collapse so a player gets the width */
 let part = 0;   /* which timbre the pads, roll and edit verbs act on */
 const fingers = new Map();   // pointerId -> the exact notes that finger started
@@ -3783,13 +3783,20 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
   d.dataset.note = note;
   d.dataset.cents = off;
   d.dataset.h = hue;
-  d.style.background = "hsl(" + hue + ",62%," + (58 + (off % 12)) + "%)";
+  /* a faceted jewel: a specular sheen top left, a deeper body, a lit rim */
+  const Lt = 54 + (off % 10);
+  d.style.background = "radial-gradient(120% 90% at 32% 16%, rgba(255,255,255,.55), rgba(255,255,255,0) 46%)," +
+                       "linear-gradient(165deg, hsl(" + hue + ",74%," + (Lt + 12) + "%), hsl(" + hue + ",80%," + (Lt - 16) + "%))";
+  d.style.boxShadow = "inset 0 0 0 1.5px rgba(255,255,255,.32), inset 0 3px 6px rgba(255,255,255,.5)," +
+                      " inset 0 -8px 16px rgba(0,0,0,.45), 0 3px 6px rgba(0,0,0,.55)";
+  d.style.textShadow = "0 1px 2px rgba(0,0,0,.55)";
   const kl = document.createElement("span");
   kl.className = "kl";
   kl.textContent = forcedLabel ? forcedLabel : (NOTE[note % 12] + (Math.floor(note / 12) - 1));
   const sub = document.createElement("small");
   sub.textContent = forcedLabel ? "" : ((off === 0 ? "0" : (off > 0 ? "+" + off : String(off))) + "c");
   kl.appendChild(sub);
+  kl.style.transform = "rotate(" + (micro.tilt || 0) + "deg)";
   d.appendChild(kl);
   d.addEventListener("pointerdown", ev=>{
     ev.preventDefault();
@@ -3836,6 +3843,26 @@ function buildMicro(){
   rb.textContent = "ROOT " + NOTE[(60 + micro.root) % 12];
   rb.onclick = ()=>{ micro.root = (micro.root + 1) % 12; buildMicro(); saveState(); };
   bar.appendChild(rb);
+  /* live geometry: gap between keys, tilt of the whole field, key size */
+  const geom = (label, key, lo, hi, val)=>{
+    const t = document.createElement("span"); t.className = "lab"; t.textContent = label;
+    const inp = document.createElement("input");
+    inp.type = "range"; inp.min = lo; inp.max = hi; inp.step = 1; inp.value = micro[key];
+    inp.style.width = "86px"; inp.id = "g_" + key;
+    const out = document.createElement("span"); out.className = "lab";
+    out.style.minWidth = "26px"; out.textContent = micro[key];
+    inp.oninput = ()=>{
+      micro[key] = +inp.value; out.textContent = inp.value;
+      const g = document.getElementById("mrow");
+      if(g && g.__fill) g.__fill();
+    };
+    inp.onchange = ()=> saveState();
+    bar.appendChild(t); bar.appendChild(inp); bar.appendChild(out);
+  };
+  geom("GAP", "gap", 0, 18);
+  geom("TILT", "tilt", -25, 25);
+  geom("SIZE", "ksize", 60, 150);
+
   /* the file transport rides on this board: no second keyboard */
   const sel = document.createElement("select"); sel.id = "midisel"; sel.className = "pbtn";
   sel.style.minWidth = "230px";
@@ -4203,7 +4230,9 @@ function hexGrid(container){
     const SIZES = [[0,2],[0,5],[0,8],[0,11],[0,14],[0,17],[0,20],[0,23],[0,26],
                    [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]];
     const ROWS = SIZES.length, MAXC = 30;
-    const TILT = 7;
+    const TILT = (typeof micro.tilt === "number" ? micro.tilt : 7);
+    const GAP = Math.max(0, micro.gap | 0);
+    const ZOOM = Math.max(0.5, Math.min(1.6, (micro.ksize || 100) / 100));
     const w = Math.max(22, Math.floor(Math.min(availW / (MAXC + 0.5),
                      availH / (((ROWS - 1) * 0.75 + 1)) * (Math.sqrt(3) / 2))));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
@@ -4216,7 +4245,7 @@ function hexGrid(container){
     /* the silhouette is a leaning block of 280 keys, so centre its bounding box */
     grid.style.marginLeft = Math.max(0, Math.round((availW - gridW) / 2)) + "px";
     grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
-    grid.style.transform = "rotate(" + (-TILT) + "deg)";
+    grid.style.transform = "rotate(" + (-TILT) + "deg) scale(" + ZOOM.toFixed(3) + ")";
     grid.style.transformOrigin = "center center";
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
@@ -4250,8 +4279,9 @@ function hexGrid(container){
         }
         const k = microKey(c, r, MAXC, ROWS, fNote, fLab, (zone ? fCents : null));
         k.dataset.zone = zone;
-        k.style.width = w + "px";
-        k.style.height = h + "px";
+        const kw = Math.max(8, w - GAP), kh = Math.round(kw * 2 / Math.sqrt(3));
+        k.style.width = kw + "px";
+        k.style.height = kh + "px";
         /* one half key of shear per row: that is what makes the intervals read as
            diagonals on the real instrument, and it replaces the odd row stagger */
         k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
@@ -4270,12 +4300,13 @@ function hexGrid(container){
           k.style.boxShadow = "";
           k.style.color = "#111";
         }
-        k.style.fontSize = Math.max(11, Math.round(w * 0.19)) + "px";
+        k.style.fontSize = Math.max(10, Math.round(kw * 0.24)) + "px";
         k.style.lineHeight = "1.05";
         grid.__keys.push({el: k, pitch: (+k.dataset.note) * 100 + (+k.dataset.cents)});
         grid.appendChild(k);
       }
     }
+    grid.__fill = fill;
     hexKeys = grid.__keys;
     relightHeld();
   };
