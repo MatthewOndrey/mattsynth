@@ -4233,8 +4233,11 @@ function hexGrid(container){
     const TILT = (typeof micro.tilt === "number" ? micro.tilt : 7);
     const GAP = Math.max(0, micro.gap | 0);
     const ZOOM = Math.max(0.5, Math.min(1.6, (micro.ksize || 100) / 100));
-    const w = Math.max(22, Math.floor(Math.min(availW / (MAXC + 0.5),
-                     availH / (((ROWS - 1) * 0.75 + 1)) * (Math.sqrt(3) / 2))));
+    /* the largest key that still fits the stage, then SIZE trims down from there, so
+       the board can never spill out of the container */
+    const wMax = Math.max(22, Math.floor(Math.min(availW / (MAXC + 0.5),
+                       availH / (((ROWS - 1) * 0.75 + 1)) * (Math.sqrt(3) / 2))));
+    const w = Math.max(12, Math.min(wMax, Math.round(wMax * ZOOM)));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
     const vpitch = h * 0.75;
     const gridH = Math.round((ROWS - 1) * vpitch + h);
@@ -4245,7 +4248,7 @@ function hexGrid(container){
     /* the silhouette is a leaning block of 280 keys, so centre its bounding box */
     grid.style.marginLeft = Math.max(0, Math.round((availW - gridW) / 2)) + "px";
     grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
-    grid.style.transform = "rotate(" + (-TILT) + "deg) scale(" + ZOOM.toFixed(3) + ")";
+    grid.style.transform = "rotate(" + (-TILT) + "deg)";
     grid.style.transformOrigin = "center center";
     /* a re-lay out must start clean, or every slider move piles more keys on top */
     while(grid.firstChild) grid.removeChild(grid.firstChild);
