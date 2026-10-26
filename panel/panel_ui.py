@@ -4203,6 +4203,13 @@ function hexGrid(container){
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
     const vpitch = h * 0.75;
     const gridH = Math.round((ROWS - 1) * vpitch + h);
+    const gridW = Math.round(MAXC * w + w / 2);
+    grid.style.height = gridH + "px";
+    grid.style.width = gridW + "px";
+    grid.style.position = "relative";
+    /* the silhouette is a leaning block of 280 keys, so centre its bounding box */
+    grid.style.marginLeft = Math.max(0, Math.round((availW - gridW) / 2)) + "px";
+    grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
       const x0 = SIZES[r][0], len = SIZES[r][1];
