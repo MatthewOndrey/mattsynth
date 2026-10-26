@@ -610,7 +610,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
 .mkey.pb { filter: saturate(.35) brightness(.55); box-shadow: inset 0 0 0 4px #ffb74d; opacity:.85; }
 #mrow.hex { position:relative; flex:1; min-height:0; }
 #mrow.hex .mkey { position:absolute; border:none; border-radius:0;
-                  clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0 50%); }
+                  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
 /* --- press feedback: a held key glows, and every hit throws a spark burst ---- */
 @keyframes heldPulse {
   0%,100% { filter: drop-shadow(0 0 6px rgba(255,255,255,.55)) brightness(1.12); }
@@ -3744,11 +3744,13 @@ function droneModTick(){
 /* g = fifths per octave, s = the row step. s must be COPRIME with g, otherwise
    the grid only ever lands on a fraction of the steps: 24-EDO with g=14 and s=8
    both even leaves every key exactly on a semitone and no quarter tone reachable. */
+/* Bosanquet-Wilson on the real board: one step right is a whole tone, one step up is
+   a semitone, so every column is a chromatic run and the diagonals are fifths-ish. */
 const EDO_CFG = {
-  12: { g:7,  s:4  },   /* 600c rows, major third          */
-  19: { g:11, s:6  },   /* 379c rows                       */
-  24: { g:14, s:9  },   /* 450c rows, odd so parity varies */
-  31: { g:18, s:11 }    /* 426c rows                       */
+  12: { M2:2, m2:1 },
+  19: { M2:3, m2:2 },
+  24: { M2:4, m2:2 },
+  31: { M2:5, m2:2 }
 };
 /* Axis choice, and why it matters: a real Lumatone's honeycomb puts ONE SMALL STEP
    along the short axis and the fifth or third along the other, so 280 keys cover a
@@ -3759,9 +3761,7 @@ const EDO_CFG = {
    Both are centerd on C4 so the board sits in a playable register. */
 function microCents(c, r, cols, rows){
   const cfg = EDO_CFG[micro.edo];
-  const stepX = micro.layout === "hex" ? 1 : cfg.g;
-  const cx = (cols - 1) / 2, cy = (rows - 1) / 2;
-  const steps = (c - cx) * stepX - (r - cy) * cfg.s;
+  const steps = (c - 15) * cfg.M2 - (r - 9) * cfg.m2;
   return 6000 + micro.root * 100 + steps * (1200 / micro.edo);
 }
 function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
@@ -3773,8 +3773,7 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
             ? (forcedCents | 0)
             : Math.round(cents - note * 100);
   const cfg = EDO_CFG[micro.edo];
-  const stepX = micro.layout === "hex" ? 1 : cfg.g;
-  const deg = Math.round(((c - (cols - 1) / 2) * stepX - (r - (rows - 1) / 2) * cfg.s) % micro.edo);
+  const deg = Math.round(((c - 15) * cfg.M2 - (r - 9) * cfg.m2) % micro.edo);
   const degn = ((deg % micro.edo) + micro.edo) % micro.edo;
   const hue = Math.round(degn / micro.edo * 360);
   const d = document.createElement("div");
@@ -3919,7 +3918,7 @@ function buildMicro(){
     buildMicro(); saveState();
   };
   bar.appendChild(sz);
-  const info = lab(EDO_CFG[micro.edo].g + " fifths / " + EDO_CFG[micro.edo].s + " thirds per octave, " +
+  const info = lab("columns of " + EDO_CFG[micro.edo].m2 + " and rows of " + EDO_CFG[micro.edo].M2 + " steps, " +
                    (1200 / micro.edo).toFixed(2) + "c per key");
   bar.appendChild(info);
   wrap.appendChild(bar);
@@ -4193,35 +4192,26 @@ function hexGrid(container){
     const availH = Math.max(220, bottom - top - 6);
     /* the real instrument is 280 keys: 14 rows of 20, with the ends stepped in row by
        row so the outline slants and every interval runs on a diagonal */
-    const COLS = 28;
-    const insetOf = (row)=>{
-      return 0;
-    };
-    /* flat top hexagons in vertical columns, which is how the hardware is built: a
-       column runs straight down, the next one is offset by half a key, and the whole
-       field shears so the rows run on a diagonal */
-    const SHEAR = 0;                                  /* no lean: it fills a rectangle */
-    const w = Math.max(30, Math.floor(availW / (0.75 * (COLS - 1) + 1)));
-    const h = Math.round(w * Math.sqrt(3) / 2);       /* flat-top hexagon */
-    const hpitch = w * 0.75;
-    const ROWS = Math.max(6, Math.floor((availH - h / 2) / h));
-    const gridH = Math.round(ROWS * h + h / 2);
-    const padY = 0;
-    /* the keys are absolute, so the grid has no intrinsic width: give it one or the
-       board collapses to a single clipped column */
-    grid.style.height = gridH + "px";
-    grid.style.width = Math.round(hpitch * (COLS - 1) + w) + "px";
-    grid.style.position = "relative";
-    grid.style.marginLeft = "auto";
-    grid.style.marginRight = "auto";
-    grid.style.marginTop = "0px";
+    /* the hardware is 19 rows of keys, and each row starts further right and is
+       shorter than the one above towards the bottom, which is what gives the ends
+       their diagonal. Row table taken from the Lumatone mapping tool. */
+    const SIZES = [[0,2],[0,5],[0,8],[0,11],[0,14],[0,17],[0,20],[0,23],[0,26],
+                   [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]];
+    const ROWS = SIZES.length, MAXC = 30;
+    const w = Math.max(22, Math.floor(Math.min(availW / (MAXC + 0.5),
+                     availH / (((ROWS - 1) * 0.75 + 1)) * (Math.sqrt(3) / 2))));
+    const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
+    const vpitch = h * 0.75;
+    const gridH = Math.round((ROWS - 1) * vpitch + h);
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
-      for(let c = 0; c < COLS; c++){
+      const x0 = SIZES[r][0], len = SIZES[r][1];
+      for(let ci = 0; ci < len; ci++){
+        const c = x0 + ci;
         const DRUMS = [36, 38, 40, 42, 44];
         const DRUM_NAMES = ["KICK", "SNR", "PERC", "CHH", "OHH"];
         const rc = c;
-        const rUp = ROWS - 1 - r;
+        const rUp = r;
         let zone = 0, fNote = null, fLab = null, fCents = 0;
         if(micro.splitMode === "abcd" && rUp === 0){
           if(rc < DRUMS.length){
@@ -4243,14 +4233,14 @@ function hexGrid(container){
             fLab = NOTE[(want % 12 + 12) % 12];
           }
         }
-        const k = microKey(c, r, COLS, ROWS, fNote, fLab, (zone ? fCents : null));
+        const k = microKey(c, r, MAXC, ROWS, fNote, fLab, (zone ? fCents : null));
         k.dataset.zone = zone;
         k.style.width = w + "px";
         k.style.height = h + "px";
         /* one half key of shear per row: that is what makes the intervals read as
            diagonals on the real instrument, and it replaces the odd row stagger */
-        k.style.left = Math.round(hpitch * c) + "px";
-        k.style.top = Math.round(padY + (r + (c % 2 ? 0.5 : 0) - SHEAR * c) * h) + "px";
+        k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
+        k.style.top = Math.round(r * vpitch) + "px";
         const zn = +k.dataset.zone || 0;
         if(zn === 2 || zn === 3 || (micro.splitOn && (+k.dataset.note < (micro.split|0)))){
           const rim = zn === 2 ? "#ff8a65" : (zn === 3 ? "#b388ff" : "#ffb74d");
