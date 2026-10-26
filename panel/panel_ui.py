@@ -4193,21 +4193,20 @@ function hexGrid(container){
     const availH = Math.max(220, bottom - top - 6);
     /* the real instrument is 280 keys: 14 rows of 20, with the ends stepped in row by
        row so the outline slants and every interval runs on a diagonal */
-    const COLS = 28, ROWS = 10;   /* 280 keys, the count on the hardware */
+    const COLS = 28;
     const insetOf = (row)=>{
       return 0;
     };
     /* flat top hexagons in vertical columns, which is how the hardware is built: a
        column runs straight down, the next one is offset by half a key, and the whole
        field shears so the rows run on a diagonal */
-    const SHEAR = 0.16;
-    const wFitH = availH / ((ROWS + 0.5 + SHEAR * COLS) * (Math.sqrt(3) / 2));
-    const wFitW = availW / (0.75 * (COLS - 1) + 1);
-    const w = Math.max(30, Math.floor(Math.min(wFitH, wFitW)));
+    const SHEAR = 0;                                  /* no lean: it fills a rectangle */
+    const w = Math.max(30, Math.floor(availW / (0.75 * (COLS - 1) + 1)));
     const h = Math.round(w * Math.sqrt(3) / 2);       /* flat-top hexagon */
     const hpitch = w * 0.75;
-    const gridH = Math.round((ROWS + 0.5 + SHEAR * COLS) * h);
-    const padY = Math.round(SHEAR * COLS * h);
+    const ROWS = Math.max(6, Math.floor((availH - h / 2) / h));
+    const gridH = Math.round(ROWS * h + h / 2);
+    const padY = 0;
     /* the keys are absolute, so the grid has no intrinsic width: give it one or the
        board collapses to a single clipped column */
     grid.style.height = gridH + "px";
