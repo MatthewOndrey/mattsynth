@@ -4264,7 +4264,9 @@ function hexGrid(container){
     for(let it = 0; it < 22; it++){
       const mid = (lo + hi) / 2;
       const b = boxOf(mid);
-      if(b[0] <= availW && b[1] <= availH) lo = mid; else hi = mid;
+      /* width is the goal; the leaning shape leaves its corners empty, so allow it to
+         run past the bottom a little rather than shrink the whole board */
+      if(b[0] <= availW && b[1] <= availH * 1.30) lo = mid; else hi = mid;
     }
     const w = Math.max(10, Math.floor(lo));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
@@ -4278,6 +4280,16 @@ function hexGrid(container){
     /* the silhouette is a leaning block of 280 keys, so centre its bounding box */
     grid.style.marginLeft = Math.max(0, Math.round((availW - gridW) / 2)) + "px";
     grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
+    /* the rotation moves the visual centre off the element's centre, so nudge the
+       margins once the transform is live and the board sits square in the stage */
+    requestAnimationFrame(()=>{
+      const r = grid.getBoundingClientRect(), st = v.getBoundingClientRect();
+      if(!r.width) return;
+      const dx = Math.round((st.left + st.width / 2) - (r.left + r.width / 2));
+      const dy = Math.round((st.top + st.height / 2) - (r.top + r.height / 2));
+      if(Math.abs(dx) > 1) grid.style.marginLeft = (parseFloat(grid.style.marginLeft || 0) + dx) + "px";
+      if(Math.abs(dy) > 1) grid.style.marginTop = (parseFloat(grid.style.marginTop || 0) + dy) + "px";
+    });
     grid.style.transform = "rotate(" + (-TILT) + "deg)";
     grid.style.transformOrigin = "center center";
     /* a re-lay out must start clean, or every slider move piles more keys on top */
