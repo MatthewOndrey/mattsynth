@@ -611,6 +611,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
 #mrow.hex { position:relative; flex:1; min-height:0; }
 #mrow.hex .mkey { position:absolute; border:none; border-radius:0;
                   clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
+  .mkey .kl { width:100%; height:100%; display:flex; flex-direction:column;
+              align-items:center; justify-content:center; transform:rotate(7deg); }
 /* --- press feedback: a held key glows, and every hit throws a spark burst ---- */
 @keyframes heldPulse {
   0%,100% { filter: drop-shadow(0 0 6px rgba(255,255,255,.55)) brightness(1.12); }
@@ -3782,10 +3784,13 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
   d.dataset.cents = off;
   d.dataset.h = hue;
   d.style.background = "hsl(" + hue + ",62%," + (58 + (off % 12)) + "%)";
-  d.textContent = forcedLabel ? forcedLabel : (NOTE[note % 12] + (Math.floor(note / 12) - 1));
+  const kl = document.createElement("span");
+  kl.className = "kl";
+  kl.textContent = forcedLabel ? forcedLabel : (NOTE[note % 12] + (Math.floor(note / 12) - 1));
   const sub = document.createElement("small");
   sub.textContent = forcedLabel ? "" : ((off === 0 ? "0" : (off > 0 ? "+" + off : String(off))) + "c");
-  d.appendChild(sub);
+  kl.appendChild(sub);
+  d.appendChild(kl);
   d.addEventListener("pointerdown", ev=>{
     ev.preventDefault();
     if(fingers.has(ev.pointerId)) return;
@@ -4198,6 +4203,7 @@ function hexGrid(container){
     const SIZES = [[0,2],[0,5],[0,8],[0,11],[0,14],[0,17],[0,20],[0,23],[0,26],
                    [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]];
     const ROWS = SIZES.length, MAXC = 30;
+    const TILT = 7;
     const w = Math.max(22, Math.floor(Math.min(availW / (MAXC + 0.5),
                      availH / (((ROWS - 1) * 0.75 + 1)) * (Math.sqrt(3) / 2))));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
@@ -4210,6 +4216,8 @@ function hexGrid(container){
     /* the silhouette is a leaning block of 280 keys, so centre its bounding box */
     grid.style.marginLeft = Math.max(0, Math.round((availW - gridW) / 2)) + "px";
     grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
+    grid.style.transform = "rotate(" + (-TILT) + "deg)";
+    grid.style.transformOrigin = "center center";
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
       const x0 = SIZES[r][0], len = SIZES[r][1];
