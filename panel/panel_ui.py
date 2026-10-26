@@ -4195,11 +4195,10 @@ function hexGrid(container){
        row so the outline slants and every interval runs on a diagonal */
     const COLS = 20, ROWS = 14;
     const insetOf = (row)=>{
-      const d = Math.abs(row - (ROWS - 1) / 2);   /* 0 in the middle, 6.5 at the edges */
-      return Math.max(0, Math.min(4, Math.round((d - 2.4) * 0.85)));
+      return 0;
     };
     const wFitH = availH / (0.75 * (ROWS - 1) + 1) * (Math.sqrt(3) / 2);
-    const wFitW = availW / (COLS + 0.5);
+    const wFitW = availW / (COLS + 0.25 * ROWS);
     const w = Math.max(30, Math.floor(Math.min(wFitH, wFitW)));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
     const vpitch = h * 0.75;                          /* rows interlock by a quarter */
@@ -4215,9 +4214,7 @@ function hexGrid(container){
       for(let c = 0; c < COLS; c++){
         const DRUMS = [36, 38, 40, 42, 44];
         const DRUM_NAMES = ["KICK", "SNR", "PERC", "CHH", "OHH"];
-        const ins = insetOf(r);
-        if(c < ins || c > COLS - 1 - ins) continue;    /* the slanted edge */
-        const rc = c - ins;                            /* position within the row */
+        const rc = c;
         const rUp = ROWS - 1 - r;
         let zone = 0, fNote = null, fLab = null, fCents = 0;
         if(micro.splitMode === "abcd" && rUp === 0){
@@ -4244,7 +4241,11 @@ function hexGrid(container){
         k.dataset.zone = zone;
         k.style.width = w + "px";
         k.style.height = h + "px";
-        k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
+        /* one half key of shear per row: that is what makes the intervals read as
+           diagonals on the real instrument, and it replaces the odd row stagger */
+        const blockW = (COLS + 0.25 * (ROWS - 1)) * w;
+        const padX = Math.max(0, Math.round((availW - blockW) / 2));
+        k.style.left = Math.round(padX + (c + (r - (ROWS - 1) / 2) * 0.25 + (ROWS - 1) / 8) * w) + "px";
         k.style.top = Math.round(r * vpitch) + "px";
         const zn = +k.dataset.zone || 0;
         if(zn === 2 || zn === 3 || (micro.splitOn && (+k.dataset.note < (micro.split|0)))){
