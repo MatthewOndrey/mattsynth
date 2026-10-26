@@ -916,7 +916,7 @@ let bendRange=1200;   /* cents at full deflection, set by the BEND knob */
 let chordN=3;         /* how many notes a pad plays with CHORD on, set by the CHORD knob */
 let chordSpace=1;     /* multiplies the chord type gaps: maj 0-2-4 at 2 becomes 0-4-8 */
 /* microtonal player: EDO, layout and root */
-const micro = { edo:24, layout:"bosa", root:0, size:"big", gap:4, tilt:7, ksize:100 };
+const micro = { edo:24, layout:"bosa", root:0, size:"big", gapX:4, gapY:4, tilt:15, ksize:100 };
 let fxHidden = false;   /* the right column can collapse so a player gets the width */
 let part = 0;   /* which timbre the pads, roll and edit verbs act on */
 const fingers = new Map();   // pointerId -> the exact notes that finger started
@@ -3859,9 +3859,10 @@ function buildMicro(){
     inp.onchange = ()=> saveState();
     bar.appendChild(t); bar.appendChild(inp); bar.appendChild(out);
   };
-  geom("GAP", "gap", 0, 18);
-  geom("TILT", "tilt", -25, 25);
-  geom("SIZE", "ksize", 60, 150);
+  geom("SPACE X", "gapX", 0, 24);
+  geom("SPACE Y", "gapY", 0, 24);
+  geom("TILT", "tilt", -30, 30);
+  geom("SIZE", "ksize", 50, 150);
 
   /* the file transport rides on this board: no second keyboard */
   const sel = document.createElement("select"); sel.id = "midisel"; sel.className = "pbtn";
@@ -4231,17 +4232,18 @@ function hexGrid(container){
                    [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]];
     const ROWS = SIZES.length, MAXC = 30;
     const TILT = (typeof micro.tilt === "number" ? micro.tilt : 7);
-    const GAP = Math.max(0, micro.gap | 0);
+    const GX = Math.max(0, micro.gapX | 0), GY = Math.max(0, micro.gapY | 0);
     const ZOOM = Math.max(0.5, Math.min(1.6, (micro.ksize || 100) / 100));
-    /* the largest key that still fits the stage, then SIZE trims down from there, so
-       the board can never spill out of the container */
-    const wMax = Math.max(22, Math.floor(Math.min(availW / (MAXC + 0.5),
-                       availH / (((ROWS - 1) * 0.75 + 1)) * (Math.sqrt(3) / 2))));
-    const w = Math.max(12, Math.min(wMax, Math.round(wMax * ZOOM)));
+    /* largest key that still fits with the chosen spacing; SIZE trims down from it */
+    const wFitW = (availW - (MAXC + 0.5) * GX) / (MAXC + 0.5);
+    const wFitH = (availH - (ROWS - 1) * GY) / (((ROWS - 1) * 0.75 + 1) * 2 / Math.sqrt(3));
+    const wMax = Math.max(14, Math.floor(Math.min(wFitW, wFitH)));
+    const w = Math.max(10, Math.min(wMax, Math.round(wMax * ZOOM)));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
     const vpitch = h * 0.75;
-    const gridH = Math.round((ROWS - 1) * vpitch + h);
-    const gridW = Math.round(MAXC * w + w / 2);
+    const pitchX = w + GX, pitchY = vpitch + GY;
+    const gridH = Math.round((ROWS - 1) * pitchY + h);
+    const gridW = Math.round(MAXC * pitchX + w / 2);
     grid.style.height = gridH + "px";
     grid.style.width = gridW + "px";
     grid.style.position = "relative";
@@ -4284,13 +4286,13 @@ function hexGrid(container){
         }
         const k = microKey(c, r, MAXC, ROWS, fNote, fLab, (zone ? fCents : null));
         k.dataset.zone = zone;
-        const kw = Math.max(8, w - GAP), kh = Math.round(kw * 2 / Math.sqrt(3));
+        const kw = w;
         k.style.width = kw + "px";
-        k.style.height = kh + "px";
+        k.style.height = h + "px";
         /* one half key of shear per row: that is what makes the intervals read as
            diagonals on the real instrument, and it replaces the odd row stagger */
-        k.style.left = Math.round(c * w + (r % 2 ? w / 2 : 0)) + "px";
-        k.style.top = Math.round(r * vpitch) + "px";
+        k.style.left = Math.round(c * pitchX + (r % 2 ? w / 2 : 0)) + "px";
+        k.style.top = Math.round(r * pitchY) + "px";
         const zn = +k.dataset.zone || 0;
         if(zn === 2 || zn === 3 || (micro.splitOn && (+k.dataset.note < (micro.split|0)))){
           const rim = zn === 2 ? "#ff8a65" : (zn === 3 ? "#b388ff" : "#ffb74d");
