@@ -610,7 +610,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
 .mkey.pb { filter: saturate(.35) brightness(.55); box-shadow: inset 0 0 0 4px #ffb74d; opacity:.85; }
 #mrow.hex { position:relative; flex:1; min-height:0; }
 #mrow.hex .mkey { position:absolute; border:none; border-radius:0;
-                  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
+                  clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0 50%); }
 /* --- press feedback: a held key glows, and every hit throws a spark burst ---- */
 @keyframes heldPulse {
   0%,100% { filter: drop-shadow(0 0 6px rgba(255,255,255,.55)) brightness(1.12); }
@@ -4193,21 +4193,28 @@ function hexGrid(container){
     const availH = Math.max(220, bottom - top - 6);
     /* the real instrument is 280 keys: 14 rows of 20, with the ends stepped in row by
        row so the outline slants and every interval runs on a diagonal */
-    const COLS = 20, ROWS = 14;
+    const COLS = 28, ROWS = 10;   /* 280 keys, the count on the hardware */
     const insetOf = (row)=>{
       return 0;
     };
-    const wFitH = availH / (0.75 * (ROWS - 1) + 1) * (Math.sqrt(3) / 2);
-    const wFitW = availW / (COLS + 0.25 * ROWS);
+    /* flat top hexagons in vertical columns, which is how the hardware is built: a
+       column runs straight down, the next one is offset by half a key, and the whole
+       field shears so the rows run on a diagonal */
+    const SHEAR = 0.16;
+    const wFitH = availH / ((ROWS + 0.5 + SHEAR * COLS) * (Math.sqrt(3) / 2));
+    const wFitW = availW / (0.75 * (COLS - 1) + 1);
     const w = Math.max(30, Math.floor(Math.min(wFitH, wFitW)));
-    const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
-    const vpitch = h * 0.75;                          /* rows interlock by a quarter */
-    const gridH = Math.round((ROWS - 1) * vpitch + h);
+    const h = Math.round(w * Math.sqrt(3) / 2);       /* flat-top hexagon */
+    const hpitch = w * 0.75;
+    const gridH = Math.round((ROWS + 0.5 + SHEAR * COLS) * h);
+    const padY = Math.round(SHEAR * COLS * h);
     /* the keys are absolute, so the grid has no intrinsic width: give it one or the
        board collapses to a single clipped column */
     grid.style.height = gridH + "px";
-    grid.style.width = Math.round(COLS * w + w / 2) + "px";
+    grid.style.width = Math.round(hpitch * (COLS - 1) + w) + "px";
     grid.style.position = "relative";
+    grid.style.marginLeft = "auto";
+    grid.style.marginRight = "auto";
     grid.style.marginTop = "0px";
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
@@ -4243,10 +4250,8 @@ function hexGrid(container){
         k.style.height = h + "px";
         /* one half key of shear per row: that is what makes the intervals read as
            diagonals on the real instrument, and it replaces the odd row stagger */
-        const blockW = (COLS + 0.25 * (ROWS - 1)) * w;
-        const padX = Math.max(0, Math.round((availW - blockW) / 2));
-        k.style.left = Math.round(padX + (c + (r - (ROWS - 1) / 2) * 0.25 + (ROWS - 1) / 8) * w) + "px";
-        k.style.top = Math.round(r * vpitch) + "px";
+        k.style.left = Math.round(hpitch * c) + "px";
+        k.style.top = Math.round(padY + (r + (c % 2 ? 0.5 : 0) - SHEAR * c) * h) + "px";
         const zn = +k.dataset.zone || 0;
         if(zn === 2 || zn === 3 || (micro.splitOn && (+k.dataset.note < (micro.split|0)))){
           const rim = zn === 2 ? "#ff8a65" : (zn === 3 ? "#b388ff" : "#ffb74d");
