@@ -4251,12 +4251,15 @@ function hexGrid(container){
       /* the honeycomb from before the Lumatone work: eleven runs, as many columns as
          fit, one key size solved from the stage, no tilt and no scaling */
       const RUNS = 11, wantCols = 28.5;
-      const wFitH = availH / (0.75 * (RUNS - 1) + 1) * (Math.sqrt(3) / 2);
+      /* fit the screen, not just the container: the stage is taller than the display */
+      const roomH = Math.min(availH, window.innerHeight - top - 12);
+      const wFitH = roomH / (0.75 * (RUNS - 1) + 1) * (Math.sqrt(3) / 2);
       const wFitW = availW / wantCols;
       w = Math.max(44, Math.floor(Math.min(wFitH, wFitW)));
       h = Math.round(w * 2 / Math.sqrt(3));
       vpitch = h * 0.75;
-      ROWS = Math.max(6, Math.floor((availH - h) / (vpitch + GY)) + 1);
+      ROWS = Math.max(6, Math.floor((roomH - h) / (vpitch + GY)) + 1);
+      ROWS = Math.min(ROWS, Math.max(6, Math.floor((window.innerHeight - top - 20 - h) / (vpitch + GY)) + 1));
       MAXC = Math.max(8, Math.floor((availW - w / 2) / w));
       SIZES = [];
       for(let i = 0; i < ROWS; i++) SIZES.push([0, MAXC]);
@@ -4279,7 +4282,7 @@ function hexGrid(container){
     grid.style.position = "relative";
     /* the silhouette is a leaning block of 280 keys, so centre its bounding box */
     grid.style.marginLeft = Math.max(0, Math.round((availW - gridW) / 2)) + "px";
-    grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
+    grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2) - 28) + "px";
     /* the rotation moves the visual centre off the element's centre, so nudge the
        margins once the transform is live and the board sits square in the stage */
     /* measure the keys that actually exist and scale the finished board until one
@@ -4295,17 +4298,20 @@ function hexGrid(container){
       /* the stage can be taller than the screen, so the real ceiling is the viewport */
       const room = Math.max(160, Math.min(availH, window.innerHeight - v.getBoundingClientRect().top - 8));
       const sc = Math.min(availW / bw, room / bh) * 0.985;
-      if(sc > 0.2 && sc < 6) grid.style.transform = "rotate(" + (-TILT) + "deg) scale(" + sc.toFixed(4) + ")";
+      const sc2 = HX ? Math.min(1, sc) : sc;   /* the honeycomb never upscales */
+      if(sc2 > 0.2 && sc2 < 6) grid.style.transform = "rotate(" + (-TILT) + "deg) scale(" + sc2.toFixed(4) + ")";
       requestAnimationFrame(()=>{
         const r = grid.getBoundingClientRect(), st = v.getBoundingClientRect();
         const dx = Math.round((st.left + st.width / 2) - (r.left + r.width / 2));
         const dy = Math.round((st.top + st.height / 2) - (r.top + r.height / 2));
         if(Math.abs(dx) > 1) grid.style.marginLeft = Math.max(0, parseFloat(grid.style.marginLeft || 0) + dx) + "px";
         if(Math.abs(dy) > 1) grid.style.marginTop = Math.max(0, parseFloat(grid.style.marginTop || 0) + dy) + "px";
-        /* scaled keys stand taller than the element box, so measure the keys */
+        /* scaled keys stand taller than the element box, so measure the keys and shift
+           the transform itself, which the flex parent cannot swallow */
         const kb = Math.max.apply(null, grid.__keys.map(o=>o.el.getBoundingClientRect().bottom));
         const over = kb - (window.innerHeight - 16);
-        if(over > 0) grid.style.marginTop = (parseFloat(grid.style.marginTop || 0) - Math.ceil(over)) + "px";
+        if(over > 0) grid.style.transform = "translateY(" + (-Math.ceil(over)) + "px) rotate(" +
+                      (-TILT) + "deg) scale(" + sc2.toFixed(4) + ")";
       });
     });
     grid.style.transform = "rotate(" + (-TILT) + "deg)";
