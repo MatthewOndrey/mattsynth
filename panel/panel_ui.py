@@ -4191,15 +4191,18 @@ function hexGrid(container){
     const stripEl = document.getElementById("drumstrip");
     const bottom = (v.getBoundingClientRect().bottom || window.innerHeight) - (stripEl ? 92 : 0);
     const availH = Math.max(220, bottom - top - 6);
-    const RUNS = 11;
-    const wantCols = micro.size === "small" ? 28.5 : 16.5;
-    const wFitH = availH / (0.75 * (RUNS - 1) + 1) * (Math.sqrt(3) / 2);
-    const wFitW = availW / wantCols;
-    const w = Math.max(44, Math.floor(Math.min(wFitH, wFitW)));
+    /* the real instrument is 280 keys: 14 rows of 20, with the ends stepped in row by
+       row so the outline slants and every interval runs on a diagonal */
+    const COLS = 20, ROWS = 14;
+    const insetOf = (row)=>{
+      const d = Math.abs(row - (ROWS - 1) / 2);   /* 0 in the middle, 6.5 at the edges */
+      return Math.max(0, Math.min(4, Math.round((d - 2.4) * 0.85)));
+    };
+    const wFitH = availH / (0.75 * (ROWS - 1) + 1) * (Math.sqrt(3) / 2);
+    const wFitW = availW / (COLS + 0.5);
+    const w = Math.max(30, Math.floor(Math.min(wFitH, wFitW)));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
     const vpitch = h * 0.75;                          /* rows interlock by a quarter */
-    const ROWS = Math.max(6, Math.floor((availH - h) / vpitch) + 1);
-    const COLS = Math.max(8, Math.floor((availW - w / 2) / w));
     const gridH = Math.round((ROWS - 1) * vpitch + h);
     /* the keys are absolute, so the grid has no intrinsic width: give it one or the
        board collapses to a single clipped column */
@@ -4212,16 +4215,19 @@ function hexGrid(container){
       for(let c = 0; c < COLS; c++){
         const DRUMS = [36, 38, 40, 42, 44];
         const DRUM_NAMES = ["KICK", "SNR", "PERC", "CHH", "OHH"];
+        const ins = insetOf(r);
+        if(c < ins || c > COLS - 1 - ins) continue;    /* the slanted edge */
+        const rc = c - ins;                            /* position within the row */
         const rUp = ROWS - 1 - r;
         let zone = 0, fNote = null, fLab = null, fCents = 0;
         if(micro.splitMode === "abcd" && rUp === 0){
-          if(c < DRUMS.length){
-            zone = 2; fNote = DRUMS[c]; fLab = DRUM_NAMES[c];
+          if(rc < DRUMS.length){
+            zone = 2; fNote = DRUMS[rc]; fLab = DRUM_NAMES[rc];
           } else {
             /* the rest of the bottom row is the bass, plain chromatic semitones */
             /* the Wolf's bass sits six semitones above the note it is sent, measured
                against the board, so compensate and keep the label honest */
-            const want = 40 + (c - DRUMS.length);   /* the Wolf will not speak below E2 */
+            const want = 40 + (rc - DRUMS.length);   /* the Wolf will not speak below E2 */
             zone = 3;
             /* the Wolf's bass tracks pitch badly: measured, note 28 sounds as 34 and 34
                sounds as 42, so it is not an offset but a scale of four thirds. Invert
