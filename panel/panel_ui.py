@@ -916,7 +916,7 @@ let bendRange=1200;   /* cents at full deflection, set by the BEND knob */
 let chordN=3;         /* how many notes a pad plays with CHORD on, set by the CHORD knob */
 let chordSpace=1;     /* multiplies the chord type gaps: maj 0-2-4 at 2 becomes 0-4-8 */
 /* microtonal player: EDO, layout and root */
-const micro = { edo:24, layout:"bosa", root:0, size:"big", gapX:4, gapY:4, tilt:16, ksize:100 };
+const micro = { edo:24, layout:"lum", root:0, size:"big", gapX:4, gapY:4, tilt:16, ksize:100 };
 let fxHidden = false;   /* the right column can collapse so a player gets the width */
 let part = 0;   /* which timbre the pads, roll and edit verbs act on */
 const fingers = new Map();   // pointerId -> the exact notes that finger started
@@ -3749,10 +3749,10 @@ function droneModTick(){
 /* Bosanquet-Wilson on the real board: one step right is a whole tone, one step up is
    a semitone, so every column is a chromatic run and the diagonals are fifths-ish. */
 const EDO_CFG = {
-  12: { M2:2, m2:1 },
-  19: { M2:3, m2:2 },
-  24: { M2:4, m2:2 },
-  31: { M2:5, m2:2 }
+  12: { M2:2, m2:1, g:7,  s:4  },
+  19: { M2:3, m2:2, g:11, s:6  },
+  24: { M2:4, m2:2, g:14, s:9  },
+  31: { M2:5, m2:2, g:18, s:11 }
 };
 /* Axis choice, and why it matters: a real Lumatone's honeycomb puts ONE SMALL STEP
    along the short axis and the fifth or third along the other, so 280 keys cover a
@@ -3763,7 +3763,11 @@ const EDO_CFG = {
    Both are centerd on C4 so the board sits in a playable register. */
 function microCents(c, r, cols, rows){
   const cfg = EDO_CFG[micro.edo];
-  const steps = (c - 15) * cfg.M2 - (r - 9) * cfg.m2;
+  /* HEXXX keeps the original honeycomb mapping: a semitone across, a third up */
+  const hx = micro.layout === "hexxx";
+  const steps = hx
+    ? (c - (cols - 1) / 2) - (r - (rows - 1) / 2) * cfg.s
+    : (c - 15) * cfg.M2 - (r - 9) * cfg.m2;
   return 6000 + micro.root * 100 + steps * (1200 / micro.edo);
 }
 function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
@@ -3775,7 +3779,9 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
             ? (forcedCents | 0)
             : Math.round(cents - note * 100);
   const cfg = EDO_CFG[micro.edo];
-  const deg = Math.round(((c - 15) * cfg.M2 - (r - 9) * cfg.m2) % micro.edo);
+  const hx = micro.layout === "hexxx";
+  const deg = Math.round(((hx ? (c - (cols - 1) / 2) - (r - (rows - 1) / 2) * cfg.s
+                             : (c - 15) * cfg.M2 - (r - 9) * cfg.m2) % micro.edo));
   const degn = ((deg % micro.edo) + micro.edo) % micro.edo;
   const hue = Math.round(degn / micro.edo * 360);
   const d = document.createElement("div");
@@ -3835,9 +3841,13 @@ function buildMicro(){
   });
   bar.appendChild(lab("LAYOUT"));
   const lb = document.createElement("button");
-  lb.textContent = micro.layout === "hex" ? "LUMATONE" : "BOSANQUET";
-  if(micro.layout === "hex") lb.classList.add("on");
-  lb.onclick = ()=>{ micro.layout = micro.layout === "hex" ? "bosa" : "hex"; buildMicro(); saveState(); };
+  const LAYOUT_NAME = { lum:"LUMATONE", bosa:"BOSANQUET", hexxx:"HEXXX" };
+  lb.textContent = LAYOUT_NAME[micro.layout] || "LUMATONE";
+  lb.classList.add("on");
+  lb.onclick = ()=>{
+    micro.layout = micro.layout === "lum" ? "bosa" : (micro.layout === "bosa" ? "hexxx" : "lum");
+    buildMicro(); saveState();
+  };
   bar.appendChild(lb);
   const rb = document.createElement("button");
   rb.textContent = "ROOT " + NOTE[(60 + micro.root) % 12];
@@ -3954,7 +3964,7 @@ function buildMicro(){
   bar.appendChild(info);
   wrap.appendChild(bar);
 
-  if(micro.layout === "hex"){
+  if(micro.layout === "lum" || micro.layout === "hexxx"){
     wrap.appendChild(hexGrid(v));
     v.appendChild(wrap);
     /* measure after the grid is in the page: the toolbar height is not a constant,
@@ -4228,21 +4238,38 @@ function hexGrid(container){
     /* the hardware is 19 rows of keys, and each row starts further right and is
        shorter than the one above towards the bottom, which is what gives the ends
        their diagonal. Row table taken from the Lumatone mapping tool. */
-    const SIZES = [[0,2],[0,5],[0,8],[0,11],[0,14],[0,17],[0,20],[0,23],[0,26],
-                   [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]];
-    const ROWS = SIZES.length, MAXC = 30;
-    const TILT = Math.max(-20, Math.min(20, (typeof micro.tilt === "number" ? micro.tilt : 16)));
+    /* LUMATONE uses the hardware's stepped 19 rows; BOSANQUET and HEXXX are a plain
+       rectangle of the same keys */
+    const LUM = micro.layout === "lum", HX = micro.layout === "hexxx";
     const GX = Math.max(0, micro.gapX | 0), GY = Math.max(0, micro.gapY | 0);
-
-    /* largest key that still fits with the chosen spacing; SIZE trims down from it */
-    /* the field is rotated, so the block that has to fit is its rotated bounding box,
-       not the upright one. Search the largest key that still fits both ways. */
-    const w = 48;   /* nominal: the finished board is scaled to the stage below */
-    const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
-    const vpitch = h * 0.75;
-    const pitchX = w + GX, pitchY = vpitch + GY;
-    const gridH = Math.round((ROWS - 1) * pitchY + h);
-    const gridW = Math.round(MAXC * pitchX + w / 2);
+    let SIZES, ROWS, MAXC, w, h, vpitch, pitchX, pitchY, gridH, gridW;
+    if(HX){
+      /* the honeycomb from before the Lumatone work: eleven runs, as many columns as
+         fit, one key size solved from the stage, no tilt and no scaling */
+      const RUNS = 11, wantCols = 28.5;
+      const wFitH = availH / (0.75 * (RUNS - 1) + 1) * (Math.sqrt(3) / 2);
+      const wFitW = availW / wantCols;
+      w = Math.max(44, Math.floor(Math.min(wFitH, wFitW)));
+      h = Math.round(w * 2 / Math.sqrt(3));
+      vpitch = h * 0.75;
+      ROWS = Math.max(6, Math.floor((availH - h) / vpitch) + 1);
+      MAXC = Math.max(8, Math.floor((availW - w / 2) / w));
+      SIZES = [];
+      for(let i = 0; i < ROWS; i++) SIZES.push([0, MAXC]);
+    } else {
+      SIZES = LUM
+        ? [[0,2],[0,5],[0,8],[0,11],[0,14],[0,17],[0,20],[0,23],[0,26],
+           [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]]
+        : (function(){ const a = []; for(let i = 0; i < 12; i++) a.push([0, 28]); return a; })();
+      ROWS = SIZES.length; MAXC = LUM ? 30 : 28;
+      w = 48;                       /* nominal: the board is scaled to the stage below */
+      h = Math.round(w * 2 / Math.sqrt(3));
+      vpitch = h * 0.75;
+    }
+    pitchX = w + GX; pitchY = vpitch + GY;
+    gridH = Math.round((ROWS - 1) * pitchY + h);
+    gridW = Math.round(MAXC * pitchX + w / 2);
+    const TILT = LUM ? 16 : 0;   /* the lean belongs to the hardware silhouette */
     grid.style.height = gridH + "px";
     grid.style.width = gridW + "px";
     grid.style.position = "relative";
@@ -4253,6 +4280,7 @@ function hexGrid(container){
        margins once the transform is live and the board sits square in the stage */
     /* measure the keys that actually exist and scale the finished board until one
        dimension touches the stage: no arithmetic guesswork, it simply fills */
+    if(!HX)
     requestAnimationFrame(()=>{
       const kk = grid.__keys.map(o=>o.el.getBoundingClientRect());
       if(!kk.length) return;
@@ -5065,7 +5093,7 @@ function applyState(s){
     if(typeof s.micro.bassOfs === "number") micro.bassOfs = s.micro.bassOfs;
     if(typeof s.micro.bassSpan === "number") micro.bassSpan = s.micro.bassSpan;
     if([12,19,24,31].indexOf(s.micro.edo) >= 0) micro.edo = s.micro.edo;
-    if(s.micro.layout === "hex" || s.micro.layout === "bosa") micro.layout = s.micro.layout;
+    if(s.micro.layout === "lum" || s.micro.layout === "hexxx" || s.micro.layout === "bosa") micro.layout = s.micro.layout;
     if(s.micro.size === "small" || s.micro.size === "big") micro.size = s.micro.size;
     if(typeof s.micro.root === "number") micro.root = ((s.micro.root % 12) + 12) % 12;
   }
