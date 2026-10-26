@@ -3802,7 +3802,8 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
   const sub = document.createElement("small");
   sub.textContent = forcedLabel ? "" : ((off === 0 ? "0" : (off > 0 ? "+" + off : String(off))) + "c");
   kl.appendChild(sub);
-  kl.style.transform = "rotate(" + (micro.tilt || 0) + "deg)";
+  /* only the leaning Lumatone view needs the labels turned back; the others are square */
+  kl.style.transform = "rotate(" + (micro.layout === "lum" ? 16 : 0) + "deg)";
   d.appendChild(kl);
   d.addEventListener("pointerdown", ev=>{
     ev.preventDefault();
@@ -4232,7 +4233,9 @@ function hexGrid(container){
     /* the octave strip lives in the header now, so the floor is the view itself */
     const stripEl = document.getElementById("drumstrip");
     const bottom = (v.getBoundingClientRect().bottom || window.innerHeight) - (stripEl ? 92 : 0);
-    const availH = Math.max(220, bottom - top - 6);
+    /* never trust the container's bottom past the screen: the stage can be taller
+       than the viewport and the last rows land off-screen */
+    const availH = Math.max(220, Math.min(bottom, window.innerHeight - 6) - top - 6);
     /* the real instrument is 280 keys: 14 rows of 20, with the ends stepped in row by
        row so the outline slants and every interval runs on a diagonal */
     /* the hardware is 19 rows of keys, and each row starts further right and is
@@ -4241,7 +4244,8 @@ function hexGrid(container){
     /* LUMATONE uses the hardware's stepped 19 rows; BOSANQUET and HEXXX are a plain
        rectangle of the same keys */
     const LUM = micro.layout === "lum", HX = micro.layout === "hexxx";
-    const GX = Math.max(0, micro.gapX | 0), GY = Math.max(0, micro.gapY | 0);
+    /* HEXXX is the tight honeycomb: keys touch, only the Lumatone view spaces them */
+    const GX = HX ? 0 : Math.max(0, micro.gapX | 0), GY = HX ? 0 : Math.max(0, micro.gapY | 0);
     let SIZES, ROWS, MAXC, w, h, vpitch, pitchX, pitchY, gridH, gridW;
     if(HX){
       /* the honeycomb from before the Lumatone work: eleven runs, as many columns as
@@ -4252,7 +4256,7 @@ function hexGrid(container){
       w = Math.max(44, Math.floor(Math.min(wFitH, wFitW)));
       h = Math.round(w * 2 / Math.sqrt(3));
       vpitch = h * 0.75;
-      ROWS = Math.max(6, Math.floor((availH - h) / vpitch) + 1);
+      ROWS = Math.max(6, Math.floor((availH - h) / (vpitch + GY)) + 1);
       MAXC = Math.max(8, Math.floor((availW - w / 2) / w));
       SIZES = [];
       for(let i = 0; i < ROWS; i++) SIZES.push([0, MAXC]);
@@ -4280,7 +4284,6 @@ function hexGrid(container){
        margins once the transform is live and the board sits square in the stage */
     /* measure the keys that actually exist and scale the finished board until one
        dimension touches the stage: no arithmetic guesswork, it simply fills */
-    if(!HX)
     requestAnimationFrame(()=>{
       const kk = grid.__keys.map(o=>o.el.getBoundingClientRect());
       if(!kk.length) return;
@@ -4289,7 +4292,9 @@ function hexGrid(container){
                       if(r.top < y0) y0 = r.top; if(r.bottom > y1) y1 = r.bottom; });
       const bw = x1 - x0, bh = y1 - y0;
       if(!bw || !bh) return;
-      const sc = Math.min(availW / bw, availH / bh) * 0.985;   /* a hair of margin */
+      /* the stage can be taller than the screen, so the real ceiling is the viewport */
+      const room = Math.max(160, Math.min(availH, window.innerHeight - v.getBoundingClientRect().top - 8));
+      const sc = Math.min(availW / bw, room / bh) * 0.985;
       if(sc > 0.2 && sc < 6) grid.style.transform = "rotate(" + (-TILT) + "deg) scale(" + sc.toFixed(4) + ")";
       requestAnimationFrame(()=>{
         const r = grid.getBoundingClientRect(), st = v.getBoundingClientRect();
@@ -4297,6 +4302,10 @@ function hexGrid(container){
         const dy = Math.round((st.top + st.height / 2) - (r.top + r.height / 2));
         if(Math.abs(dx) > 1) grid.style.marginLeft = Math.max(0, parseFloat(grid.style.marginLeft || 0) + dx) + "px";
         if(Math.abs(dy) > 1) grid.style.marginTop = Math.max(0, parseFloat(grid.style.marginTop || 0) + dy) + "px";
+        /* scaled keys stand taller than the element box, so measure the keys */
+        const kb = Math.max.apply(null, grid.__keys.map(o=>o.el.getBoundingClientRect().bottom));
+        const over = kb - (window.innerHeight - 16);
+        if(over > 0) grid.style.marginTop = (parseFloat(grid.style.marginTop || 0) - Math.ceil(over)) + "px";
       });
     });
     grid.style.transform = "rotate(" + (-TILT) + "deg)";
@@ -4311,7 +4320,7 @@ function hexGrid(container){
         const DRUMS = [36, 38, 40, 42, 44];
         const DRUM_NAMES = ["KICK", "SNR", "PERC", "CHH", "OHH"];
         const rc = c;
-        const rUp = r;
+        const rUp = ROWS - 1 - r;   /* the drum row belongs at the bottom */
         let zone = 0, fNote = null, fLab = null, fCents = 0;
         if(micro.splitMode === "abcd" && rUp === 0){
           if(rc < DRUMS.length){
@@ -4363,6 +4372,16 @@ function hexGrid(container){
       }
     }
     grid.__fill = fill;
+    /* the first pass runs before everything has settled; check once more and lift the
+       board if its last row still falls below the screen */
+    setTimeout(()=>{
+      if(!grid.__keys.length) return;
+      const kb = Math.max.apply(null, grid.__keys.map(o=>o.el.getBoundingClientRect().bottom));
+      const over = kb - (window.innerHeight - 16);
+      const kt = Math.min.apply(null, grid.__keys.map(o=>o.el.getBoundingClientRect().top));
+      if(over > 0) grid.style.marginTop = (parseFloat(grid.style.marginTop || 0) - Math.ceil(over)) + "px";
+      else if(kt < 120) grid.style.marginTop = (parseFloat(grid.style.marginTop || 0) + Math.ceil(120 - kt)) + "px";
+    }, 400);
     hexKeys = grid.__keys;
     relightHeld();
   };
