@@ -4238,37 +4238,7 @@ function hexGrid(container){
     /* largest key that still fits with the chosen spacing; SIZE trims down from it */
     /* the field is rotated, so the block that has to fit is its rotated bounding box,
        not the upright one. Search the largest key that still fits both ways. */
-    const th = Math.abs(micro.tilt || 0) * Math.PI / 180;
-    const cth = Math.cos(th), sth = Math.sin(th);
-    /* the field is a leaning parallelogram, so measure the keys themselves rather
-       than their enclosing rectangle: the empty corners would cost a lot of size */
-    const boxOf = (ww)=>{
-      const hh = ww * 2 / Math.sqrt(3);
-      const px = ww + GX, py = hh * 0.75 + GY;
-      const gw = MAXC * px + ww / 2, gh = (ROWS - 1) * py + hh;
-      const cx0 = gw / 2, cy0 = gh / 2;
-      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-      for(let rr = 0; rr < ROWS; rr++){
-        const st = SIZES[rr][0], ln = SIZES[rr][1];
-        for(let cc = st; cc < st + ln; cc++){
-          const kx = cc * px + (rr % 2 ? ww / 2 : 0) + ww / 2 - cx0;
-          const ky = rr * py + hh / 2 - cy0;
-          const rx = kx * cth - ky * sth, ry = kx * sth + ky * cth;
-          if(rx < x0) x0 = rx; if(rx > x1) x1 = rx;
-          if(ry < y0) y0 = ry; if(ry > y1) y1 = ry;
-        }
-      }
-      return [x1 - x0 + ww, y1 - y0 + hh];
-    };
-    let lo = 10, hi = 320;
-    for(let it = 0; it < 22; it++){
-      const mid = (lo + hi) / 2;
-      const b = boxOf(mid);
-      /* width is the goal; the leaning shape leaves its corners empty, so allow it to
-         run past the bottom a little rather than shrink the whole board */
-      if(b[0] <= availW && b[1] <= availH * 1.30) lo = mid; else hi = mid;
-    }
-    const w = Math.max(10, Math.floor(lo));
+    const w = 48;   /* nominal: the finished board is scaled to the stage below */
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
     const vpitch = h * 0.75;
     const pitchX = w + GX, pitchY = vpitch + GY;
@@ -4282,13 +4252,25 @@ function hexGrid(container){
     grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
     /* the rotation moves the visual centre off the element's centre, so nudge the
        margins once the transform is live and the board sits square in the stage */
+    /* measure the keys that actually exist and scale the finished board until one
+       dimension touches the stage: no arithmetic guesswork, it simply fills */
     requestAnimationFrame(()=>{
-      const r = grid.getBoundingClientRect(), st = v.getBoundingClientRect();
-      if(!r.width) return;
-      const dx = Math.round((st.left + st.width / 2) - (r.left + r.width / 2));
-      const dy = Math.round((st.top + st.height / 2) - (r.top + r.height / 2));
-      if(Math.abs(dx) > 1) grid.style.marginLeft = (parseFloat(grid.style.marginLeft || 0) + dx) + "px";
-      if(Math.abs(dy) > 1) grid.style.marginTop = (parseFloat(grid.style.marginTop || 0) + dy) + "px";
+      const kk = grid.__keys.map(o=>o.el.getBoundingClientRect());
+      if(!kk.length) return;
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      kk.forEach(r=>{ if(r.left < x0) x0 = r.left; if(r.right > x1) x1 = r.right;
+                      if(r.top < y0) y0 = r.top; if(r.bottom > y1) y1 = r.bottom; });
+      const bw = x1 - x0, bh = y1 - y0;
+      if(!bw || !bh) return;
+      const sc = Math.min(availW / bw, availH / bh) * 0.985;   /* a hair of margin */
+      if(sc > 0.2 && sc < 6) grid.style.transform = "rotate(" + (-TILT) + "deg) scale(" + sc.toFixed(4) + ")";
+      requestAnimationFrame(()=>{
+        const r = grid.getBoundingClientRect(), st = v.getBoundingClientRect();
+        const dx = Math.round((st.left + st.width / 2) - (r.left + r.width / 2));
+        const dy = Math.round((st.top + st.height / 2) - (r.top + r.height / 2));
+        if(Math.abs(dx) > 1) grid.style.marginLeft = Math.max(0, parseFloat(grid.style.marginLeft || 0) + dx) + "px";
+        if(Math.abs(dy) > 1) grid.style.marginTop = Math.max(0, parseFloat(grid.style.marginTop || 0) + dy) + "px";
+      });
     });
     grid.style.transform = "rotate(" + (-TILT) + "deg)";
     grid.style.transformOrigin = "center center";
