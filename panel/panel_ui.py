@@ -4247,6 +4247,8 @@ function hexGrid(container){
     grid.style.marginTop = Math.max(0, Math.round((availH - gridH) / 2)) + "px";
     grid.style.transform = "rotate(" + (-TILT) + "deg) scale(" + ZOOM.toFixed(3) + ")";
     grid.style.transformOrigin = "center center";
+    /* a re-lay out must start clean, or every slider move piles more keys on top */
+    while(grid.firstChild) grid.removeChild(grid.firstChild);
     grid.__keys = [];
     for(let r = 0; r < ROWS; r++){
       const x0 = SIZES[r][0], len = SIZES[r][1];
