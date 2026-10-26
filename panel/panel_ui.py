@@ -3861,7 +3861,6 @@ function buildMicro(){
   };
   geom("SPACE X", "gapX", 0, 24);
   geom("SPACE Y", "gapY", 0, 24);
-  geom("TILT", "tilt", -20, 20);
 
   /* the file transport rides on this board: no second keyboard */
   const sel = document.createElement("select"); sel.id = "midisel"; sel.className = "pbtn";
