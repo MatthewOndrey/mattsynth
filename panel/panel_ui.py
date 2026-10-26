@@ -3861,8 +3861,7 @@ function buildMicro(){
   };
   geom("SPACE X", "gapX", 0, 24);
   geom("SPACE Y", "gapY", 0, 24);
-  geom("TILT", "tilt", -30, 30);
-  geom("SIZE", "ksize", 50, 150);
+  geom("TILT", "tilt", -20, 20);
 
   /* the file transport rides on this board: no second keyboard */
   const sel = document.createElement("select"); sel.id = "midisel"; sel.className = "pbtn";
@@ -4218,7 +4217,9 @@ function hexGrid(container){
     /* measure on the next frame: the column width changes when the knob panel
        folds away, and reading it in the same tick measures the old layout */
     const availW = v.clientWidth || window.innerWidth;
-    const top = grid.getBoundingClientRect().top;
+    const top = v.getBoundingClientRect().top + 4;   /* the container, never the grid:
+                                                       the grid's own offset feeds back
+                                                       into the height and shrinks it */
     /* the octave strip lives in the header now, so the floor is the view itself */
     const stripEl = document.getElementById("drumstrip");
     const bottom = (v.getBoundingClientRect().bottom || window.innerHeight) - (stripEl ? 92 : 0);
@@ -4231,14 +4232,41 @@ function hexGrid(container){
     const SIZES = [[0,2],[0,5],[0,8],[0,11],[0,14],[0,17],[0,20],[0,23],[0,26],
                    [1,28],[4,26],[7,23],[10,20],[13,17],[16,14],[19,11],[22,8],[25,5],[28,2]];
     const ROWS = SIZES.length, MAXC = 30;
-    const TILT = (typeof micro.tilt === "number" ? micro.tilt : 7);
+    const TILT = Math.max(-20, Math.min(20, (typeof micro.tilt === "number" ? micro.tilt : 15)));
     const GX = Math.max(0, micro.gapX | 0), GY = Math.max(0, micro.gapY | 0);
-    const ZOOM = Math.max(0.5, Math.min(1.6, (micro.ksize || 100) / 100));
+
     /* largest key that still fits with the chosen spacing; SIZE trims down from it */
-    const wFitW = (availW - (MAXC + 0.5) * GX) / (MAXC + 0.5);
-    const wFitH = (availH - (ROWS - 1) * GY) / (((ROWS - 1) * 0.75 + 1) * 2 / Math.sqrt(3));
-    const wMax = Math.max(14, Math.floor(Math.min(wFitW, wFitH)));
-    const w = Math.max(10, Math.min(wMax, Math.round(wMax * ZOOM)));
+    /* the field is rotated, so the block that has to fit is its rotated bounding box,
+       not the upright one. Search the largest key that still fits both ways. */
+    const th = Math.abs(micro.tilt || 0) * Math.PI / 180;
+    const cth = Math.cos(th), sth = Math.sin(th);
+    /* the field is a leaning parallelogram, so measure the keys themselves rather
+       than their enclosing rectangle: the empty corners would cost a lot of size */
+    const boxOf = (ww)=>{
+      const hh = ww * 2 / Math.sqrt(3);
+      const px = ww + GX, py = hh * 0.75 + GY;
+      const gw = MAXC * px + ww / 2, gh = (ROWS - 1) * py + hh;
+      const cx0 = gw / 2, cy0 = gh / 2;
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for(let rr = 0; rr < ROWS; rr++){
+        const st = SIZES[rr][0], ln = SIZES[rr][1];
+        for(let cc = st; cc < st + ln; cc++){
+          const kx = cc * px + (rr % 2 ? ww / 2 : 0) + ww / 2 - cx0;
+          const ky = rr * py + hh / 2 - cy0;
+          const rx = kx * cth - ky * sth, ry = kx * sth + ky * cth;
+          if(rx < x0) x0 = rx; if(rx > x1) x1 = rx;
+          if(ry < y0) y0 = ry; if(ry > y1) y1 = ry;
+        }
+      }
+      return [x1 - x0 + ww, y1 - y0 + hh];
+    };
+    let lo = 10, hi = 320;
+    for(let it = 0; it < 22; it++){
+      const mid = (lo + hi) / 2;
+      const b = boxOf(mid);
+      if(b[0] <= availW && b[1] <= availH) lo = mid; else hi = mid;
+    }
+    const w = Math.max(10, Math.floor(lo));
     const h = Math.round(w * 2 / Math.sqrt(3));       /* pointy-top hexagon */
     const vpitch = h * 0.75;
     const pitchX = w + GX, pitchY = vpitch + GY;
