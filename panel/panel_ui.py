@@ -916,7 +916,7 @@ let bendRange=1200;   /* cents at full deflection, set by the BEND knob */
 let chordN=3;         /* how many notes a pad plays with CHORD on, set by the CHORD knob */
 let chordSpace=1;     /* multiplies the chord type gaps: maj 0-2-4 at 2 becomes 0-4-8 */
 /* microtonal player: EDO, layout and root */
-const micro = { edo:24, layout:"lum", root:0, size:"big", gapX:4, gapY:4, tilt:16, ksize:100 };
+const micro = { edo:24, layout:"lum", root:0, size:"big" };
 let fxHidden = false;   /* the right column can collapse so a player gets the width */
 let part = 0;   /* which timbre the pads, roll and edit verbs act on */
 const fingers = new Map();   // pointerId -> the exact notes that finger started
@@ -3870,8 +3870,6 @@ function buildMicro(){
     inp.onchange = ()=> saveState();
     bar.appendChild(t); bar.appendChild(inp); bar.appendChild(out);
   };
-  geom("SPACE X", "gapX", 0, 24);
-  geom("SPACE Y", "gapY", 0, 24);
 
   /* the file transport rides on this board: no second keyboard */
   const sel = document.createElement("select"); sel.id = "midisel"; sel.className = "pbtn";
@@ -4244,8 +4242,7 @@ function hexGrid(container){
     /* LUMATONE uses the hardware's stepped 19 rows; BOSANQUET and HEXXX are a plain
        rectangle of the same keys */
     const LUM = micro.layout === "lum", HX = micro.layout === "hexxx";
-    /* HEXXX is the tight honeycomb: keys touch, only the Lumatone view spaces them */
-    const GX = HX ? 0 : Math.max(0, micro.gapX | 0), GY = HX ? 0 : Math.max(0, micro.gapY | 0);
+    const GX = 0, GY = 0;   /* the keys touch, in every layout */
     let SIZES, ROWS, MAXC, w, h, vpitch, pitchX, pitchY, gridH, gridW;
     if(HX){
       /* the honeycomb from before the Lumatone work: eleven runs, as many columns as
