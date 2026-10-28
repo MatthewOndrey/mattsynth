@@ -4498,6 +4498,8 @@ function sqTick(){
 
 function sqPlay(){
   sqStop();
+  /* the kit pads live on notes 36..43, so arm it or the drum parts are silent */
+  send("P 36 1");
   sq.playing = true; sq.step = 0; sq.pat = 0; sq.rep = 0;
   sq.nxt = performance.now() + 30;
   sq.timer = setInterval(sqTick, 20);
