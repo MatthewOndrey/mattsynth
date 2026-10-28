@@ -584,6 +584,7 @@ button.onhold { background:#2f6b3a !important; color:#fff !important; }
 #dragmode { width:44px;  min-width:44px; }
 #gplay    { width:74px;  min-width:74px; }
 #hload    { width:64px;  min-width:64px; }
+#pprev, #pnext { min-width:54px; height:40px; font-size:22px; line-height:1; }
 #bpm      { width:56px; }
 #splitlab { display:inline-block; width:86px; text-align:center; font-size:12px; }
 .fxrow label { display:flex; justify-content:space-between; font-size:15px; color:var(--dim);
@@ -5598,15 +5599,42 @@ if(bpmEl) bpmEl.addEventListener("change", ()=>bpmApply(true));
 function paintEng(){
   const b = document.getElementById("engsel");
   if(!b) return;
-  b.textContent = engWT ? "WT" : "FM";
-  b.classList.toggle("on", engWT);
+  b.textContent = pianoOn ? "PIANO" : (engWT ? "WT" : "FM");
+  b.style.minWidth = "78px";
+  b.classList.toggle("on", engWT || pianoOn);
   FXK.forEach(k=>{
     if(k.id.indexOf("p3") !== 0) return;
     const cell = document.querySelector(".kcell [id='" + k.id + "']");
     if(cell && cell.parentNode) cell.parentNode.style.opacity = engWT ? "1" : "0.35";
   });
 }
-document.getElementById("engsel").onclick = ()=>{
+/* one control for which instrument is loaded: FM, WT or the sampled piano. It silences
+   first, so switching never leaves a voice half through the old engine. */
+function instState(){ return pianoOn ? 2 : (engWT ? 1 : 0); }
+function setInst(i){
+  send("R");
+  const vk = document.getElementById("p5");
+  pianoOn = (i === 2);
+  engWT   = (i === 1);
+  send("P 37 " + (pianoOn ? 1 : 0));
+  send("P 28 " + (engWT ? 1 : 0));
+  if(vk){ vk.value = engWT ? 12 : 8; vk.dispatchEvent(new Event("input")); }
+  if(engWT){
+    ["p30","p31","p32","p33"].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) send("P " + id.slice(1) + " " + el.value);
+    });
+  }
+  paintEng();
+  renderPatchList();
+  paintSlots();
+  syncDropdownToPart();
+  saveState();
+}
+document.getElementById("engsel").onclick = ()=> setInst((instState() + 1) % 3);
+document.getElementById("engsel").oncontextmenu = (ev)=>{ ev.preventDefault(); setInst(0); };
+
+function _unusedEngToggle(){
   engWT = !engWT;
   send("P 28 " + (engWT ? 1 : 0));
   /* the wavetable core costs ~11 us a voice, so it gets the full twelve */
@@ -5744,6 +5772,17 @@ async function wtPick(i){
 }
 
 function renderPatchList(){
+  if(pianoOn){
+    /* one instrument, so the list says so instead of showing FM patches */
+    const have = [...patchSel.options].map(o=>o.textContent);
+    if(have.length !== 1 || have[0] !== "Salamander grand"){
+      patchSel.innerHTML = "";
+      const o = document.createElement("option");
+      o.value = "-1"; o.textContent = "Salamander grand";
+      patchSel.appendChild(o);
+    }
+    return;
+  }
   if(engWT) return renderWtPatchList();   /* the header tracks the engine */
   const want = patches.map((nm,i)=>(i+1) + "   " + (nm || "-"));
   const have = [...patchSel.options].map(o=>o.textContent);
@@ -5888,7 +5927,10 @@ document.getElementById("banksel").addEventListener("pointerdown", refreshBanks)
 es.onmessage=ev=>{
   const t=ev.data;
   lastRx = Date.now();
-  if(t.startsWith("@C ")){
+  if(t.startsWith("@D ")){
+    /* temporary: the Pod's own view of a bent voice */
+    (window.__diag = window.__diag || []).push(t.slice(0, t.indexOf("*") > 0 ? t.indexOf("*") : t.length));
+  } else if(t.startsWith("@C ")){
     const p=t.slice(3, t.indexOf("*")).split(" ");
     lastVoices = p[0]|0;
     document.getElementById("voices").textContent=p[0]+" voices";
