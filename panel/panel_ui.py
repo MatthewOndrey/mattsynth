@@ -759,6 +759,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
       <button data-v="ops">OPS</button>
       <button data-v="rand">RAND</button>
       <button data-v="clips">CLIPS</button>
+      <button data-v="song">SONG</button>
       <span id="hint">pads: y = velocity, drag = filter</span>
     </div>
     <div id="view"></div>
@@ -1556,7 +1557,7 @@ function buildRoll(){
   bar.appendChild(play);
   const lab = (t)=>{ const s=document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
   bar.appendChild(lab("scale-locked rows, drag to paint"));
-  const clr = document.createElement("button"); clr.textContent = "CLEAR";
+  const clr = document.createElement("button"); clr.textContent = "CLR";
   clr.onclick = ()=>{ roll.cells.forEach(r=>r.fill(false));
     document.querySelectorAll("#roll .rc").forEach(c=>c.classList.remove("on")); };
   const rec = document.createElement("button");
@@ -4425,6 +4426,176 @@ function hexGrid(container){
   return grid;
 }
 
+
+/* --------------------------------------------------------------- sequencer --- */
+/* The Pod has no room in flash for a sequencer (the firmware sits at 97 percent of
+   128 KB), so the clock lives here and the Pod stays a sound module. Patterns are
+   16 or 32 sixteenths per part, a song is a chain of patterns, and everything is sent
+   with a 40 ms lookahead so a slow frame cannot make the groove limp. */
+const sq = { pats: [], cur: 0, song: [], songOn: false, playing: false,
+             step: 0, pat: 0, rep: 0, t0: 0, nxt: 0, timer: null, held: [] };
+
+function sqPat(i){
+  while(sq.pats.length <= i) sq.pats.push({ len: 16, ev: [] });
+  return sq.pats[i];
+}
+sqPat(0);
+
+function sqStepMs(){ return 60000 / Math.max(30, bpm | 0) / 4; }
+
+function sqFire(st){
+  const p = sqPat(sq.songOn ? (sq.song[sq.pat] ? sq.song[sq.pat].p : 0) : sq.cur);
+  const ms = sqStepMs();
+  p.ev.forEach(e=>{
+    if(e.s !== st) return;
+    send("N " + e.n + " " + (e.v || 96) + " " + (e.part || 0));
+    const of = setTimeout(()=>{
+      send("O " + e.n);
+      sq.held = sq.held.filter(x=>x !== of);
+    }, Math.max(30, (e.len || 1) * ms - 12));
+    sq.held.push(of);
+  });
+}
+
+function sqTick(){
+  if(!sq.playing) return;
+  const now = performance.now();
+  const ms = sqStepMs();
+  while(sq.nxt <= now + 40){
+    const p = sq.songOn ? (sq.song[sq.pat] ? sq.song[sq.pat].p : 0) : sq.cur;
+    const len = sqPat(p).len;
+    sqFire(sq.step);
+    sq.step++;
+    if(sq.step >= len){
+      sq.step = 0;
+      if(sq.songOn){
+        if(!sq.song.length){ sq.songOn = false; }
+        else {
+          sq.rep++;
+          const reps = sq.song[sq.pat].r || 1;
+          if(sq.rep >= reps){ sq.rep = 0; sq.pat = (sq.pat + 1) % sq.song.length; }
+        }
+      }
+    }
+    sq.nxt += ms;
+  }
+  if(view === "song") paintSongPlayhead();
+}
+
+function sqPlay(){
+  sqStop();
+  sq.playing = true; sq.step = 0; sq.pat = 0; sq.rep = 0;
+  sq.nxt = performance.now() + 30;
+  sq.timer = setInterval(sqTick, 20);
+  paintSong();
+}
+function sqStop(){
+  if(sq.timer) clearInterval(sq.timer);
+  sq.timer = null; sq.playing = false;
+  sq.held.forEach(t=>clearTimeout(t)); sq.held = [];
+  send("R");
+  paintSong();
+}
+
+function paintSongPlayhead(){
+  const g = document.getElementById("sqgrid");
+  if(!g) return;
+  Array.from(g.querySelectorAll(".sqc")).forEach((c, i)=>{
+    const st = i % 16;
+    c.classList.toggle("now", sq.playing && st === sq.step && Math.floor(i / 16) === 0);
+  });
+}
+
+function buildSong(){
+  const v = document.getElementById("view");
+  v.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.id = "song"; wrap.style.cssText = "display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-height:0;";
+  const bar = document.createElement("div"); bar.className = "seqbar";
+  bar.style.flexWrap = "wrap";
+
+  const lab = (t)=>{ const s = document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
+
+  bar.appendChild(lab("PAT"));
+  for(let i = 0; i < 16; i++){
+    const b = document.createElement("button");
+    b.textContent = String(i + 1);
+    if(i === sq.cur) b.classList.add("on");
+    b.onclick = ()=>{ sq.cur = i; buildSong(); };
+    bar.appendChild(b);
+  }
+  bar.appendChild(lab("ST"));
+  [16, 32].forEach(n=>{
+    const b = document.createElement("button");
+    b.textContent = n;
+    if(sqPat(sq.cur).len === n) b.classList.add("on");
+    b.onclick = ()=>{ sqPat(sq.cur).len = n; buildSong(); saveState(); };
+    bar.appendChild(b);
+  });
+  const clr = document.createElement("button"); clr.textContent = "CLEAR";
+  clr.onclick = ()=>{ sqPat(sq.cur).ev = []; buildSong(); saveState(); };
+  bar.appendChild(clr);
+  const pl = document.createElement("button"); pl.id = "sqplay";
+  pl.textContent = sq.playing ? "■" : "▶";
+  if(sq.playing) pl.classList.add("on");
+  pl.onclick = ()=> sq.playing ? sqStop() : sqPlay();
+  bar.appendChild(pl);
+  const sm = document.createElement("button");
+  sm.textContent = sq.songOn ? "SONG" : "PATTERN";
+  if(sq.songOn) sm.classList.add("on");
+  else sm.classList.remove("on");
+  sm.onclick = ()=>{ sq.songOn = !sq.songOn; buildSong(); saveState(); };
+  bar.appendChild(sm);
+  const add = document.createElement("button"); add.textContent = "+CH";
+  add.onclick = ()=>{ sq.song.push({ p: sq.cur, r: 2 }); buildSong(); saveState(); };
+  bar.appendChild(add);
+  const pop = document.createElement("button"); pop.textContent = "-CH";
+  pop.onclick = ()=>{ sq.song.pop(); buildSong(); saveState(); };
+  bar.appendChild(pop);
+  bar.appendChild(lab(sq.song.map(e=> (e.p + 1) + "x" + (e.r || 1)).join(" ")));
+  wrap.appendChild(bar);
+
+  const grid = document.createElement("div");
+  grid.id = "sqgrid";
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(16,1fr);gap:3px;padding:4px 2px;";
+  const len = sqPat(sq.cur).len;
+  for(let part = 0; part < 2; part++){
+    for(let st = 0; st < len; st++){
+      const c = document.createElement("div");
+      c.className = "sqc";
+      const hit = sqPat(sq.cur).ev.find(e=> e.s === st && (e.part || 0) === part);
+      c.dataset.s = st; c.dataset.p = part;
+      c.style.cssText = "height:" + (part ? 54 : 54) + "px;border-radius:6px;display:flex;" +
+        "align-items:center;justify-content:center;font:600 11px system-ui;" +
+        "background:" + (hit ? (part ? "#1d4d3a" : "#2a3f63") : "#131c22") + ";" +
+        "color:" + (hit ? "#cfe9ff" : "#3b4d58") + ";border:1px solid #1b2a30;cursor:pointer;" +
+        "user-select:none;";
+      c.textContent = hit ? NOTE[hit.n % 12] + (hit.n < 60 ? "·" : "") : String(st + 1);
+      c.onclick = ()=>{
+        const p = sqPat(sq.cur);
+        const i = p.ev.findIndex(e=> e.s === st && (e.part || 0) === part);
+        if(i >= 0) p.ev.splice(i, 1);
+        else p.ev.push({ s: st, part: part, n: keySel, v: 100, len: 1 });
+        buildSong(); saveState();
+      };
+      grid.appendChild(c);
+    }
+  }
+  wrap.appendChild(grid);
+  const hint = document.createElement("div");
+  hint.style.cssText = "color:#5a6f7a;font:12px system-ui;padding:2px 4px;";
+  hint.textContent = "click a cell to place the note chosen in the header, click again to remove. " +
+                     "CHAIN + adds the current pattern twice to the song; SONG toggles chain playback.";
+  wrap.appendChild(hint);
+  v.appendChild(wrap);
+  paintSongPlayhead();
+}
+
+function paintSong(){
+  const b = document.getElementById("sqplay");
+  if(b){ b.textContent = sq.playing ? "■" : "▶"; b.classList.toggle("on", sq.playing); }
+}
+
 function renderView(){
   if(fingers.size) releaseAll();
   if(typeof heldNote !== "undefined" && heldNote >= 0) releaseHeldNote();
@@ -4441,6 +4612,7 @@ function renderView(){
   else if(view==="ops") buildOps();
   else if(view==="rand") buildRand();
   else if(view==="clips") buildClips();
+  else if(view==="song") buildSong();
   else if(view==="grid") buildGrid();
   else if(view==="chroma") buildChroma();
   else if(view==="micro") buildMicro();
@@ -5020,7 +5192,8 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, seq: { pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn },
+    micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
     gmode: transport.global,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
@@ -5050,6 +5223,13 @@ function applyState(s){
   if(typeof s.partSplit === "number") midi.partSplit = s.partSplit;
   if(typeof s.bank === "string" && s.bank) savedBank = s.bank;
   if(s.midi) setTimeout(()=>{ midiLoadFile(s.midi).catch(()=>{}); }, 900);
+  /* the patterns and the chain come back with everything else */
+  if(s.seq && Array.isArray(s.seq.pats) && s.seq.pats.length){
+    sq.pats = s.seq.pats;
+    sq.song = Array.isArray(s.seq.song) ? s.seq.song : [];
+    sq.cur = s.seq.cur | 0;
+    sq.songOn = !!s.seq.songOn;
+  }
   setTimeout(()=>{ paintSlots(); if(engWT) renderWtPatchList(); fitHdr(); }, 1200);
   if(s.view) view = s.view;
   if(typeof s.keySel === "number") keySel = s.keySel;
