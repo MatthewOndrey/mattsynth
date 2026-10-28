@@ -614,7 +614,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
 #mrow.hex { position:relative; flex:1; min-height:0; }
 #mrow.hex .mkey { position:absolute; border:none; border-radius:0;
                   clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
-  .arpz { position:absolute; left:0; bottom:0; width:22%; height:22%;
+  .arpz { position:absolute; left:0; bottom:0; width:30%; height:30%;
         border-top-right-radius:10px; border-bottom-left-radius:inherit;
         background:linear-gradient(135deg, rgba(120,220,255,.55), rgba(150,90,255,.55));
         box-shadow:inset 0 0 8px rgba(255,255,255,.35);
@@ -1223,7 +1223,7 @@ function buildKalimba(){
 /* The bottom left corner of every grid pad is a latch. Hold corners on two or more
    pads and the notes cycle, up then down, one sixteenth of the global tempo per step.
    The corners are pointer targets in their own right, so the pad itself still plays. */
-const gArp = { held:new Map(), timer:null, step:0, playing:false, flash:null };
+const gArp = { held:new Map(), timer:null, step:0, playing:false, sustain:-1 };
 
 function gArpMs(){ return 60000 / Math.max(30, bpm | 0) / 4; }
 
@@ -1237,11 +1237,20 @@ function gArpOrder(){
   return up.concat(down);          /* 1 2 3 2 1 2 3 ... */
 }
 
-function gArpStop(){
+function gArpStopTimer(){
   if(gArp.timer) clearInterval(gArp.timer);
   gArp.timer = null; gArp.playing = false; gArp.step = 0;
-  gArp.held.forEach((el)=>{ if(el) el.classList.remove("on"); });
   document.querySelectorAll(".pad.arpFire").forEach(e=> e.classList.remove("arpFire"));
+}
+
+function gArpSilence(){
+  if(gArp.sustain >= 0){ send("O " + gArp.sustain); gArp.sustain = -1; }
+}
+
+function gArpStop(){
+  gArpStopTimer();
+  gArpSilence();
+  gArp.held.forEach((el)=>{ if(el) el.classList.remove("on"); });
 }
 
 function gArpTick(){
@@ -1259,13 +1268,26 @@ function gArpTick(){
 
 function gArpSync(){
   const n = gArpNotes();
-  if(n.length >= 2 && !gArp.timer){
-    gArp.step = 0;
-    gArp.timer = setInterval(gArpTick, gArpMs());
-    gArp.playing = true;
-    gArpTick();
-  } else if(n.length < 2 && gArp.timer){
-    gArpStop();
+  if(n.length >= 2){
+    /* the arp takes over from the single sustained note */
+    gArpSilence();
+    if(!gArp.timer){
+      gArp.step = 0;
+      gArp.timer = setInterval(gArpTick, gArpMs());
+      gArp.playing = true;
+      gArpTick();
+    }
+  } else if(n.length === 1){
+    /* one corner: hold that note, and stop cycling */
+    gArpStopTimer();
+    if(gArp.sustain !== n[0]){
+      gArpSilence();
+      send("N " + n[0] + " 108 " + part);
+      gArp.sustain = n[0];
+    }
+  } else {
+    gArpStopTimer();
+    gArpSilence();
   }
   gArp.held.forEach((el)=> { if(el) el.classList.add("on"); });
 }
