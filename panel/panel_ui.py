@@ -1387,6 +1387,9 @@ function engSpec(mode){
   return null;
 }
 const ALL_MODES = ["seq", "arp", "eu", "roll", "clips", "drone"];
+/* which tabs follow the header PLAY. Only the two that write music start on; the rest
+   are opt in, so pressing play never drags an arpeggio along by surprise. */
+const tabsOn = { seq:true, arp:false, eu:false, roll:false, clips:true, drone:false, midi:true };
 
 function arpFiring(step, when, dur){
   const notes = arpNotes();
@@ -1416,10 +1419,23 @@ function clipsFiring(step, when, dur){
 
 function startEngine(mode){
   if(mode === "clips") send("P 36 1");   /* clips are drum patterns on the sample kit */
-  const list = transport.global ? ALL_MODES.map(engSpec) : [engSpec(mode)];
+  const list = transport.global
+    ? ALL_MODES.filter(m=> tabsOn[m] !== false).map(engSpec).filter(Boolean)
+    : [engSpec(mode)];
   transport.start(list.filter(Boolean));
   paintPlay();
 }
+/* PLAY ALONG: does this tab join the header transport? */
+function playAlong(mode){
+  tabsOn[mode] = tabsOn[mode] === false;
+  if(transport.on){                 /* rebuild the running set without a gap */
+    transport.global = true;
+    const list = ALL_MODES.filter(m=> tabsOn[m] !== false).map(engSpec).filter(Boolean);
+    if(list.length) transport.start(list); else stopAll();
+  }
+  paintPlay(); paintGplay(); saveState();
+}
+
 /* one place decides what every PLAY button says and does */
 function tOn(mode){ return transport.global ? transport.on : transport.owns(mode); }
 const PLAYBTN = {seq:"seqplay", arp:"arpplay", eu:"euplay", roll:"rollplay", clips:"clipplay", drone:"droneplay"};
@@ -1429,9 +1445,15 @@ function paintPlay(){
   Object.keys(PLAYBTN).forEach(m=>{
     const b = document.getElementById(PLAYBTN[m]);
     if(!b) return;
-    const lab = PLAYLABEL[m] || ["PLAY", "STOP"];
-    b.textContent = tOn(m) ? lab[1] : lab[0];
-    b.classList.toggle("on", tOn(m));
+    if(PLAYLABEL[m]){                       /* the drone is still a hold */
+      b.textContent = tOn(m) ? PLAYLABEL[m][1] : PLAYLABEL[m][0];
+      b.classList.toggle("on", tOn(m));
+      return;
+    }
+    const on = tabsOn[m] !== false;
+    b.textContent = on ? "PLAY ALONG" : "ALONG OFF";
+    b.title = on ? "this tab follows the header PLAY" : "this tab stays silent";
+    b.classList.toggle("on", on);
   });
 }
 function paintGlobal(){
@@ -1683,7 +1705,7 @@ function buildRoll(){
   const play = document.createElement("button"); play.id = "rollplay";
   play.textContent = tOn("roll") ? "STOP" : "PLAY";
   if(tOn("roll")) play.classList.add("on");
-  play.onclick = ()=>{ if(tOn("roll")) stopAll(); else startEngine("roll"); };
+  play.onclick = ()=> playAlong("roll");
   bar.appendChild(play);
   const lab = (t)=>{ const s=document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
   bar.appendChild(lab("scale-locked rows, drag to paint"));
@@ -1766,7 +1788,7 @@ function buildArp(){
   const play = document.createElement("button"); play.id = "arpplay";
   play.textContent = tOn("arp") ? "STOP" : "PLAY";
   if(tOn("arp")) play.classList.add("on");
-  play.onclick = ()=>{ if(tOn("arp")) stopAll(); else startEngine("arp"); };
+  play.onclick = ()=> playAlong("arp");
   bar.appendChild(play);
 
   const lab = (t)=>{ const s=document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
@@ -1828,7 +1850,7 @@ function buildEuclid(){
   const play = document.createElement("button"); play.id = "euplay";
   play.textContent = tOn("eu") ? "STOP" : "PLAY";
   if(tOn("eu")) play.classList.add("on");
-  play.onclick = ()=>{ if(tOn("eu")) stopAll(); else startEngine("eu"); };
+  play.onclick = ()=> playAlong("eu");
   bar.appendChild(play);
   const lab = (t)=>{ const s=document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
   bar.appendChild(lab("euclidean lanes: pulses spread over steps, no two lanes the same"));
@@ -3079,7 +3101,7 @@ function buildClips(){
   const play = document.createElement("button"); play.id = "clipplay";
   play.textContent = tOn("clips") ? "STOP" : "PLAY";
   if(tOn("clips")) play.classList.add("on");
-  play.onclick = ()=>{ if(tOn("clips")) stopAll(); else startEngine("clips"); };
+  play.onclick = ()=> playAlong("clips");
   bar.appendChild(play);
 
   const edit = document.createElement("button");
@@ -5406,12 +5428,10 @@ paintBend();
   if(b) b.onclick = ()=> setPart(1);
 })();
 
-document.getElementById("gmode").onclick = ()=>{
-  transport.global = !transport.global;
-  if(transport.on) stopAll();   /* a mode change stops; press PLAY to restart */
-  paintGlobal();
-};
-paintGlobal();
+transport.global = true;
+const gmEl = document.getElementById("gmode");
+if(gmEl) gmEl.style.display = "none";   /* per tab switches replaced it */
+paintPlay();
 
 document.getElementById("octdn").onclick=()=>{ oct=Math.max(-4,oct-1); renderView(); };
 document.getElementById("octup").onclick=()=>{ oct=Math.min(4,oct+1); renderView(); };
@@ -5432,10 +5452,17 @@ function paintGplay(){
   b.classList.toggle("on", on);
 }
 document.getElementById("gplay").onclick = ()=>{
-  /* the header transport drives the midi file when one is loaded, the lanes otherwise */
-  if(midi.playing){ midiStop(); paintPlay(); paintGplay(); return; }
-  if(midi.evs && midi.evs.length){ midiPlay(); paintPlay(); paintGplay(); return; }
-  if(transport.on){ stopAll(); } else { transport.global = true; startEngine(view); }
+  /* one transport: it stops everything, or starts every tab that is switched to play
+     along, and the midi file with them */
+  if(transport.on || midi.playing){
+    if(midi.playing) midiStop();
+    stopAll();
+    paintPlay(); paintGplay();
+    return;
+  }
+  transport.global = true;
+  startEngine(view);
+  if(tabsOn.midi !== false && midi.evs && midi.evs.length) midiPlay();
   paintPlay(); paintGplay();
 };
 
@@ -5849,7 +5876,7 @@ function snapshot(){
     clipsState: { active: clips.active, items: clips.items },
     seq: { pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn },
     micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
-    gmode: transport.global,
+    gmode: true, tabsOn: tabsOn,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
     seq: {len:seq.len, bar:seq.bar, swing:seq.swing,
@@ -5962,7 +5989,8 @@ function applyState(s){
     if(s.micro.size === "small" || s.micro.size === "big") micro.size = s.micro.size;
     if(typeof s.micro.root === "number") micro.root = ((s.micro.root % 12) + 12) % 12;
   }
-  transport.global = !!s.gmode;
+  transport.global = true;
+  if(s.tabsOn) Object.keys(tabsOn).forEach(k=>{ if(typeof s.tabsOn[k] === "boolean") tabsOn[k] = s.tabsOn[k]; });
   paintGlobal();
   if(s.range){
     Object.keys(s.range).forEach(k=>{
