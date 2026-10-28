@@ -922,6 +922,12 @@ let bendRange=1200;   /* cents at full deflection, set by the BEND knob */
 let chordN=3;         /* how many notes a pad plays with CHORD on, set by the CHORD knob */
 let chordSpace=1;     /* multiplies the chord type gaps: maj 0-2-4 at 2 becomes 0-4-8 */
 /* microtonal player: EDO, layout and root */
+const kitPads = Array.from({length:8}, ()=>({ rate:1000, level:1000, trim:1000 }));
+let kitSel = 0;
+function kitSendPad(i){ const p = kitPads[i];
+  send("Y " + i + " " + p.rate + " " + p.level + " " + p.trim); }
+function kitSendAll(){ for(let i=0;i<8;i++) kitSendPad(i); }
+
 const micro = { edo:24, layout:"lum", root:0, size:"big" };
 let fxHidden = false;   /* the right column can collapse so a player gets the width */
 let part = 0;   /* which timbre the pads, roll and edit verbs act on */
@@ -4780,18 +4786,52 @@ function buildKit(){
     sub.style.cssText = "font:500 12px system-ui;opacity:.7;margin-top:6px";
     sub.textContent = "note " + (36 + i);
     b.appendChild(sub);
+    if(i === kitSel) b.style.outline = "3px solid #7fd1ff";
     const hit = (ev)=>{
       ev.preventDefault();
+      kitSel = i;
       b.style.transform = "scale(.97)";
       b.style.filter = "brightness(1.35)";
       send("N " + (36 + i) + " 118 0");
-      setTimeout(()=>{ b.style.transform = ""; b.style.filter = ""; }, 110);
+      setTimeout(()=>{ b.style.transform = ""; b.style.filter = ""; buildKit(); }, 110);
     };
     b.addEventListener("pointerdown", hit);
     grid.appendChild(b);
   });
+  const ed = document.createElement("div"); ed.className = "seqbar"; ed.style.flexWrap = "wrap";
+  const p0 = document.createElement("span"); p0.className = "lab";
+  p0.textContent = "PAD " + nm[kitSel];
+  ed.appendChild(p0);
+  const mk = (label, key, lo, hi)=>{
+    const t = document.createElement("span"); t.className = "lab"; t.textContent = label;
+    const r = document.createElement("input");
+    r.type = "range"; r.min = lo; r.max = hi; r.value = kitPads[kitSel][key];
+    r.style.width = "160px";
+    const v = document.createElement("span"); v.className = "lab";
+    v.style.minWidth = "46px"; v.textContent = Math.round(kitPads[kitSel][key] / 10) + "%";
+    r.oninput = ()=>{
+      kitPads[kitSel][key] = +r.value;
+      v.textContent = Math.round(r.value / 10) + "%";
+      kitSendPad(kitSel);
+    };
+    r.onchange = ()=> saveState();
+    ed.appendChild(t); ed.appendChild(r); ed.appendChild(v);
+  };
+  mk("PITCH", "rate", 500, 2000);
+  mk("LEVEL", "level", 0, 1500);
+  mk("TRIM", "trim", 100, 1000);
+  const rs = document.createElement("button"); rs.textContent = "RESET PAD";
+  rs.onclick = ()=>{ kitPads[kitSel] = { rate:1000, level:1000, trim:1000 }; kitSendPad(kitSel); buildKit(); saveState(); };
+  ed.appendChild(rs);
+  const h2 = document.createElement("div");
+  h2.style.cssText = "padding:2px 6px 8px;color:#5a6f7a;font:12px system-ui;line-height:1.45;";
+  h2.textContent = "Tap a pad to play it and select it. PITCH retunes that sample, LEVEL sets how loud it sits, " +
+                   "TRIM shortens it so a long hit can be made tight. RESET PAD puts one back.";
   wrap.appendChild(grid);
+  wrap.insertBefore(ed, grid);   /* the grid has to be in the page before this */
+  wrap.appendChild(h2);
   v.appendChild(wrap);
+  kitSendAll();
 }
 
 
@@ -5392,7 +5432,8 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, seq: { pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn },
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, kitPads: kitPads,
+    seq: { pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn },
     micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
     gmode: transport.global,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
@@ -5424,6 +5465,9 @@ function applyState(s){
   if(typeof s.bank === "string" && s.bank) savedBank = s.bank;
   if(s.midi) setTimeout(()=>{ midiLoadFile(s.midi).catch(()=>{}); }, 900);
   /* the patterns and the chain come back with everything else */
+  if(Array.isArray(s.kitPads) && s.kitPads.length === 8){
+    for(let i = 0; i < 8; i++) kitPads[i] = Object.assign({ rate:1000, level:1000, trim:1000 }, s.kitPads[i] || {});
+  }
   if(s.seq && Array.isArray(s.seq.pats) && s.seq.pats.length){
     sq.pats = s.seq.pats;
     sq.song = Array.isArray(s.seq.song) ? s.seq.song : [];

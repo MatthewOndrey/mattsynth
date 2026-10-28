@@ -760,6 +760,14 @@ static void handle(const char* body)
                     synth.Bend(clampi(a, 0, 1), b, (float)cents);
             }
             break;
+        case 'Y':
+        {
+            /* Y <pad> <rate> <level> <trim>, thousandths */
+            int pd = 0, rt = 1000, lv = 1000, tr = 1000;
+            if(sscanf(body + 1, "%d %d %d %d", &pd, &rt, &lv, &tr) == 4)
+                kit.SetPad(pd, rt, lv, tr);
+            break;
+        }
         case 'V': handle_voice(body); break;
         case 'Q': send_dump(); break;
         case 'W':
