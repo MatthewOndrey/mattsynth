@@ -4563,6 +4563,8 @@ function hexGrid(container){
    128 KB), so the clock lives here and the Pod stays a sound module. Patterns are
    16 or 32 sixteenths per part, a song is a chain of patterns, and everything is sent
    with a 40 ms lookahead so a slow frame cannot make the groove limp. */
+const JIANT = { cream:"#e8e2c8", teal:"#3ec8b0", amber:"#ffd75e", red:"#e2564d",
+                line:"#2a3b34", dim:"#7d8f86" };
 const sq = { pats: [], cur: 0, song: [], songOn: false, playing: false,
              step: 0, pat: 0, rep: 0, t0: 0, nxt: 0, timer: null, held: [],
              sel: { s: 0, part: 0 }, clip: null, chainSel: 0 };
@@ -4694,6 +4696,120 @@ function songLoad(name){
   }).catch(()=>{});
 }
 
+/* The SONG page as the FM-1 draws it: a numbered list of sections with repeats, the
+   running one in amber, a RUN lamp and the position on the right, and a thin frame
+   around the lot. Press STEPS for the editable grid. */
+function buildSongArrange(){
+  const v = document.getElementById("view");
+  v.innerHTML = "";
+  const frame = document.createElement("div");
+  frame.style.cssText = "flex:1 1 auto;display:flex;flex-direction:column;background:#050705;" +
+    "border:1px solid " + JIANT.line + ";border-radius:3px;padding:0;min-height:0;";
+
+  const head = document.createElement("div");
+  head.style.cssText = "display:flex;align-items:center;justify-content:space-between;" +
+    "padding:8px 14px;border-bottom:1px solid " + JIANT.line + ";" +
+    "font:600 15px ui-monospace,monospace;letter-spacing:.12em;color:" + JIANT.cream + ";";
+  const t = document.createElement("span"); t.textContent = "SONG";
+  const dots = document.createElement("span");
+  dots.style.cssText = "letter-spacing:6px;color:" + JIANT.dim;
+  dots.textContent = "\u25cf\u25cf\u25cf";
+  head.appendChild(t); head.appendChild(dots);
+  frame.appendChild(head);
+
+  const body = document.createElement("div");
+  body.style.cssText = "flex:1 1 auto;display:flex;min-height:0;padding:10px 14px;gap:20px;";
+
+  /* chain list */
+  const list = document.createElement("div");
+  list.style.cssText = "flex:1 1 auto;display:flex;flex-direction:column;gap:6px;overflow:auto;" +
+    "font:600 20px ui-monospace,monospace;letter-spacing:.06em;";
+  const live = sq.songOn ? sq.pat : -1;
+  if(!sq.song.length){
+    const empty = document.createElement("div");
+    empty.style.cssText = "color:" + JIANT.dim + ";font:600 18px ui-monospace,monospace;";
+    empty.textContent = "EMPTY - press ADD TO CHAIN on the steps page";
+    list.appendChild(empty);
+  }
+  sq.song.forEach((e, i)=>{
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:14px;align-items:center;padding:4px 8px;border-radius:3px;" +
+      "cursor:pointer;color:" + (i === live ? "#0a0a0a" : JIANT.cream) + ";" +
+      "background:" + (i === live ? JIANT.amber : "transparent") + ";";
+    const num = document.createElement("span");
+    num.style.color = i === live ? "#6b5a12" : JIANT.dim;
+    num.textContent = String(i + 1).padStart(2, "0");
+    const sec = document.createElement("span");
+    sec.textContent = NOTE[(padNote(0) % 12)] && false ? "" : "";
+    sec.textContent = "A" + (e.p + 1);
+    const rep = document.createElement("span");
+    rep.style.color = i === live ? "#6b5a12" : JIANT.teal;
+    rep.textContent = "x" + (e.r || 1);
+    row.appendChild(num); row.appendChild(sec); row.appendChild(rep);
+    row.onclick = ()=>{ sq.chainSel = i; sq.cur = e.p; buildSong(); };
+    list.appendChild(row);
+  });
+  body.appendChild(list);
+
+  /* the right hand column: run lamp, position, meter */
+  const side = document.createElement("div");
+  side.style.cssText = "width:170px;border-left:1px solid " + JIANT.line + ";padding-left:14px;" +
+    "display:flex;flex-direction:column;gap:14px;align-items:flex-start;";
+  const run = document.createElement("div");
+  run.style.cssText = "display:flex;align-items:center;gap:8px;font:700 18px ui-monospace,monospace;" +
+    "letter-spacing:.1em;color:" + (sq.playing ? JIANT.red : JIANT.dim) + ";";
+  const lamp = document.createElement("span");
+  lamp.style.cssText = "width:10px;height:10px;border-radius:50%;background:" +
+    (sq.playing ? JIANT.red : "#2a3b34") + ";box-shadow:" +
+    (sq.playing ? "0 0 8px " + JIANT.red : "none") + ";";
+  run.appendChild(lamp);
+  const runT = document.createElement("span"); runT.textContent = "RUN";
+  run.appendChild(runT);
+
+  const pos = document.createElement("div");
+  pos.style.cssText = "font:700 26px ui-monospace,monospace;color:" + JIANT.cream + ";";
+  const pn = sq.songOn ? (sq.song[sq.pat] ? sq.song[sq.pat].p : 0) : sq.cur;
+  pos.textContent = String(sq.pat + 1).padStart(2, "0") + "/" + String(Math.max(1, sq.song.length)).padStart(2, "0");
+
+  const meter = document.createElement("div");
+  meter.style.cssText = "display:flex;align-items:flex-end;gap:4px;height:80px;";
+  for(let i = 0; i < 8; i++){
+    const b = document.createElement("div");
+    const on = sq.playing && (i <= (sq.step % 8));
+    b.style.cssText = "width:9px;height:" + (18 + i * 8) + "px;background:" +
+      (on ? JIANT.teal : "#16241f") + ";border:1px solid " + JIANT.line + ";";
+    meter.appendChild(b);
+  }
+  side.appendChild(run); side.appendChild(pos); side.appendChild(meter);
+  body.appendChild(side);
+  frame.appendChild(body);
+
+  /* footer: transport and the way into the step editor */
+  const foot = document.createElement("div");
+  foot.style.cssText = "display:flex;align-items:center;gap:12px;padding:8px 14px;" +
+    "border-top:1px solid " + JIANT.line + ";font:600 14px ui-monospace,monospace;color:" + JIANT.cream + ";";
+  const mk = (label, accent, fn)=>{
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.style.cssText = "background:#0b1210;color:" + accent + ";border:1px solid " + JIANT.line +
+      ";border-radius:3px;padding:6px 12px;font:600 14px ui-monospace,monospace;letter-spacing:.08em;cursor:pointer;";
+    b.onclick = fn;
+    foot.appendChild(b);
+    return b;
+  };
+  mk(sq.playing ? "\u25a0 STOP" : "\u25b6 RUN", sq.playing ? JIANT.red : JIANT.teal,
+     ()=> sq.playing ? sqStop() : sqPlay());
+  mk(sq.songOn ? "CHAIN ON" : "CHAIN OFF", JIANT.amber, ()=>{ sq.songOn = !sq.songOn; buildSong(); saveState(); });
+  mk("STEPS", JIANT.cream, ()=>{ sq.ui = "steps"; buildSong(); });
+  const sp = document.createElement("span");
+  sp.style.cssText = "margin-left:auto;color:" + JIANT.dim;
+  sp.textContent = "P" + (pn + 1) + " \u00b7 " + (sq.step + 1) + "/" + sqPat(pn).len + "  " + (bpm | 0) + " BPM";
+  foot.appendChild(sp);
+  frame.appendChild(foot);
+
+  v.appendChild(frame);
+}
+
 function sqSelEv(){
   const p = sqPat(sq.cur);
   return p.ev.find(e=> e.s === sq.sel.s && (e.part || 0) === sq.sel.part) || null;
@@ -4701,6 +4817,7 @@ function sqSelEv(){
 
 function buildSong(){
   const v = document.getElementById("view");
+  if((sq.ui || "arrange") === "arrange") return buildSongArrange();
   v.innerHTML = "";
   const wrap = document.createElement("div");
   wrap.id = "song";
@@ -4741,6 +4858,7 @@ function buildSong(){
   });
   btn("CLEAR", false, ()=>{ pat.ev = []; buildSong(); saveState(); });
 
+  btn("ARRANGE", false, ()=>{ sq.ui = "arrange"; buildSong(); });
   const pl = document.createElement("button"); pl.id = "sqplay";
   pl.textContent = sq.playing ? "\u25a0" : "\u25b6"; if(sq.playing) pl.classList.add("on");
   pl.onclick = ()=> sq.playing ? sqStop() : sqPlay(); bar.appendChild(pl);
