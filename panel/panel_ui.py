@@ -4644,8 +4644,12 @@ function paintSongPlayhead(){
   const g = document.getElementById("sqgrid");
   if(!g) return;
   Array.from(g.querySelectorAll(".sqc")).forEach((c, i)=>{
-    const st = i % 16;
-    c.classList.toggle("now", sq.playing && st === sq.step && Math.floor(i / 16) === 0);
+    const cols = sqPat(sq.songOn ? (sq.song[sq.pat] ? sq.song[sq.pat].p : 0) : sq.cur).len;
+    const st = i % cols;
+    const live = sq.playing && st === sq.step;
+    c.style.outline = live ? "2px solid #ffffff" : "";
+    c.style.outlineOffset = live ? "-2px" : "";
+    c.style.filter = live ? "brightness(1.45)" : "";
   });
 }
 
@@ -4756,6 +4760,35 @@ function buildSong(){
   bar.appendChild(pos);
   wrap.appendChild(bar);
 
+  /* the readout strip: big numbers in blocks, the way the FM-1 shows tempo and position */
+  const strip = document.createElement("div");
+  strip.style.cssText = "display:flex;gap:8px;align-items:stretch;padding:4px 2px;";
+  const block = (label, value, accent)=>{
+    const b = document.createElement("div");
+    b.style.cssText = "min-width:96px;padding:6px 12px;border-radius:4px;background:#0b1013;" +
+      "border-left:3px solid " + accent + ";";
+    const l = document.createElement("div");
+    l.style.cssText = "font:600 10px ui-monospace,monospace;letter-spacing:.16em;color:#5f747d";
+    l.textContent = label;
+    const v = document.createElement("div");
+    v.style.cssText = "font:700 24px ui-monospace,monospace;color:" + accent + ";line-height:1.1";
+    v.textContent = value;
+    v.dataset.role = label.toLowerCase();
+    b.appendChild(l); b.appendChild(v);
+    strip.appendChild(b);
+    return v;
+  };
+  block("TEMPO", String(bpm | 0), "#ff8a3d");
+  block("PATTERN", String(sq.cur + 1), "#e8f6ff");
+  block("LENGTH", String(pat.len), "#e8f6ff");
+  block("SWING", (pat.swing || 0) + "%", "#19b4ac");
+  block("MODE", sq.songOn ? "SONG" : "LOOP", sq.songOn ? "#c041c0" : "#19b4ac");
+  wrap.appendChild(strip);
+
+  const rule = document.createElement("div");
+  rule.style.cssText = "height:2px;margin:2px 2px 6px;background:linear-gradient(90deg,#ff8a3d,#19b4ac 55%,#c041c0);opacity:.85";
+  wrap.appendChild(rule);
+
   if(sq.song.length){
     const ch = document.createElement("div"); ch.className = "seqbar"; ch.style.flexWrap = "wrap";
     ch.appendChild(lab("CHAIN"));
@@ -4777,7 +4810,8 @@ function buildSong(){
 
   const grid = document.createElement("div");
   grid.id = "sqgrid";
-  grid.style.cssText = "display:grid;grid-template-columns:repeat(" + pat.len + ",1fr);gap:2px;padding:2px;";
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(" + pat.len + ",1fr);gap:3px;" +
+    "padding:2px;flex:1 1 auto;min-height:0;grid-auto-rows:1fr;";
   for(let part = 0; part < 2; part++){
     for(let st = 0; st < pat.len; st++){
       const c = document.createElement("div");
@@ -4785,12 +4819,17 @@ function buildSong(){
       const sel = sq.sel.s === st && sq.sel.part === part;
       c.className = "sqc";
       c.dataset.s = st; c.dataset.p = part;
-      c.style.cssText = "height:44px;border-radius:5px;display:flex;flex-direction:column;" +
-        "align-items:center;justify-content:center;font:600 11px system-ui;cursor:pointer;" +
-        "user-select:none;border:1px solid " + (sel ? "#7fd1ff" : "#1b2a30") + ";" +
-        "background:" + (hit ? (part ? "#1d4d3a" : "#26395c")
-                              : (st % 4 === 0 ? "#16222c" : "#101920")) + ";" +
-        "color:" + (hit ? "#e8f6ff" : "#33454f") + ";";
+      /* track A is the orange row, track B the teal one, like the FM-1 screen */
+      const onCol  = part ? "#19b4ac" : "#ff8a3d";
+      const offCol = part ? (st % 4 === 0 ? "#0d2426" : "#081718")
+                          : (st % 4 === 0 ? "#241708" : "#150d05");
+      c.style.cssText = "min-height:34px;border-radius:4px;display:flex;flex-direction:column;" +
+        "align-items:center;justify-content:center;font:700 12px ui-monospace,monospace;" +
+        "letter-spacing:.04em;cursor:pointer;user-select:none;" +
+        "border:1px solid " + (sel ? "#ffffff" : "rgba(255,255,255,.06)") + ";" +
+        "background:" + (hit ? onCol : offCol) + ";" +
+        "color:" + (hit ? "#0a0a0a" : (part ? "#2c5f63" : "#5c442c")) + ";" +
+        "box-shadow:" + (hit ? "0 0 10px " + onCol + "66, inset 0 1px 0 rgba(255,255,255,.35)" : "none") + ";";
       if(hit){
         c.textContent = NOTE[hit.n % 12] + (Math.floor(hit.n / 12) - 1);
         const sm = document.createElement("small");
@@ -4854,6 +4893,7 @@ function buildSong(){
 
   const hint = document.createElement("div");
   hint.style.cssText = "padding:2px 6px 8px;color:#5a6f7a;font:12px system-ui;line-height:1.45;";
+  hint.style.cssText = "padding:6px;border-top:1px solid #1b272d;color:#7f96a1;font:12px ui-monospace,monospace;";
   hint.textContent =
     "Pick a pattern at the top, tap a cell to select that step, then PLACE drops the header's note there " +
     "or the editor changes the note already there. LOOPING PATTERN repeats this one pattern; " +
