@@ -38,9 +38,12 @@
 #include "FmEngine.h"
 #include "WtEngine.h"
 #include "KitEngine.h"
+#include "PianoEngine.h"
 
 static bool kit_on = false;
+static bool piano_on = false;
 KitEngine kit;
+PianoEngine piano;
 #include "fm_patch.h"
 
 #include <cmath>
@@ -698,6 +701,11 @@ static void handle(const char* body)
                 if(n >= 2)
                 {
                     /* notes 36..43 are the kit while it is armed */
+                    if(piano_on)
+                    {
+                        piano.Trigger(a, b);
+                        break;
+                    }
                     if(kit_on && a >= 36 && a <= 43)
                     {
                         kit.Trigger(a, b);
@@ -728,6 +736,7 @@ static void handle(const char* body)
             if(sscanf(body, "K %d", &a) == 1)
             {
                 if(kit_on && a >= 36 && a <= 43) kit.KillAll();
+                piano.KillAll();
                 synth.KillNote((uint8_t)clampi(a, 0, 127));
             }
             break;
@@ -747,6 +756,7 @@ static void handle(const char* body)
             if(sscanf(body, "P %d %d", &a, &b) == 2)
             {
                 if(a == 36) { kit_on = (b != 0); if(!kit_on) kit.KillAll(); }
+                else if(a == 37) { piano_on = (b != 0); if(!piano_on) piano.KillAll(); }
                 else apply_param(a, b);
             }
             break;
@@ -846,6 +856,8 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
     synth.Render(l, r, frames);
     if(kit_on)
         kit.Render(l, r, frames);
+    if(piano_on)
+        piano.Render(l, r, frames);
 
     /* diagnostic: a plain sine through the same output stage. If this is silent the
        problem is downstream of the engines, in the codec, the cable or the amp. */
@@ -915,6 +927,7 @@ int main(void)
 {
     hw.Init();
     kit.Init();
+    piano.Init();
     /* say where the code is running from: internal flash or the QSPI boot image */
     send_msg(System::GetProgramMemoryRegion() == System::MemoryRegion::INTERNAL_FLASH
              ? "@BOOT int" : "@BOOT qspi");
@@ -1040,7 +1053,7 @@ int main(void)
         if(now - t_cpu >= 1000)
         {
             t_cpu = now;
-            send_iv('C', synth.active_voices(), (int)g_cb_us);
+            send_iv('C', synth.active_voices() + kit.Active() + piano.Active(), (int)g_cb_us);
         }
 
         /* LEDs: green while notes sound, blue heartbeat on the link */

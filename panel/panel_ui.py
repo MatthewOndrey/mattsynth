@@ -924,6 +924,7 @@ let chordSpace=1;     /* multiplies the chord type gaps: maj 0-2-4 at 2 becomes 
 /* microtonal player: EDO, layout and root */
 const kitPads = Array.from({length:8}, ()=>({ rate:1000, level:1000, trim:1000 }));
 let kitSel = 0;
+let pianoOn = false;
 function kitSendPad(i){ const p = kitPads[i];
   send("Y " + i + " " + p.rate + " " + p.level + " " + p.trim); }
 function kitSendAll(){ for(let i=0;i<8;i++) kitSendPad(i); }
@@ -4769,6 +4770,11 @@ function buildKit(){
   const all = document.createElement("button"); all.textContent = "PANIC";
   all.onclick = ()=>{ send("R"); };
   bar.appendChild(all);
+  const pn = document.createElement("button");
+  pn.textContent = pianoOn ? "PIANO ON" : "PIANO OFF";
+  if(pianoOn) pn.classList.add("on");
+  pn.onclick = ()=>{ pianoOn = !pianoOn; send("P 37 " + (pianoOn ? 1 : 0)); buildKit(); saveState(); };
+  bar.appendChild(pn);
   bar.appendChild(lab("notes 36 to 43, eight one shots from QSPI, copied to SDRAM at boot"));
   wrap.appendChild(bar);
 
@@ -5434,7 +5440,7 @@ function snapshot(){
   FX_IDS.forEach(i=>{ const el = document.getElementById("p"+i); if(el) fx[i] = +el.value; });
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
-    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, kitPads: kitPads,
+    v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, kitPads: kitPads, pianoOn: pianoOn,
     seq: { pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn },
     micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
     gmode: transport.global,
@@ -5467,6 +5473,7 @@ function applyState(s){
   if(typeof s.bank === "string" && s.bank) savedBank = s.bank;
   if(s.midi) setTimeout(()=>{ midiLoadFile(s.midi).catch(()=>{}); }, 900);
   /* the patterns and the chain come back with everything else */
+  if(typeof s.pianoOn === "boolean") setTimeout(()=>{ pianoOn = s.pianoOn; send("P 37 " + (pianoOn ? 1 : 0)); }, 900);
   if(Array.isArray(s.kitPads) && s.kitPads.length === 8){
     for(let i = 0; i < 8; i++) kitPads[i] = Object.assign({ rate:1000, level:1000, trim:1000 }, s.kitPads[i] || {});
   }
