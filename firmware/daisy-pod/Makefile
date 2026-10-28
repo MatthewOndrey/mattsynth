@@ -7,7 +7,7 @@ TARGET = PanelLink
 
 # internal flash build
 # blocking new features. Needs the Daisy bootloader in internal flash.
-# APP_TYPE unset: internal flash build (bootloader path reverted)
+APP_TYPE = BOOT_QSPI
 
 CPP_SOURCES = PanelLink.cpp
 

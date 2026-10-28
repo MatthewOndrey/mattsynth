@@ -790,7 +790,13 @@ static void handle(const char* body)
                firmware update never needs a BOOT + RESET press again */
             send_msg("entering DFU");
             for(volatile int i = 0; i < 200000; ++i) {}
+#if defined(BOOT_APP)
+            /* running from QSPI, so the Daisy bootloader is the one that can rewrite
+               it; it waits for DFU instead of timing out */
+            System::ResetToBootloader(System::DAISY_INFINITE_TIMEOUT);
+#else
             System::ResetToBootloader(System::STM);
+#endif
             break;
         case 'A': send_body("A"); break;
         case 'L': send_patch_list(); break;
@@ -882,6 +888,9 @@ static IWDG_HandleTypeDef hiwdg;
 int main(void)
 {
     hw.Init();
+    /* say where the code is running from: internal flash or the QSPI boot image */
+    send_msg(System::GetProgramMemoryRegion() == System::MemoryRegion::INTERNAL_FLASH
+             ? "@BOOT int" : "@BOOT qspi");
     hw.SetAudioBlockSize(48);
 
     /* Self recovery: a wedged main loop kills USB and the only cure used to be

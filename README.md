@@ -67,11 +67,17 @@ the wave set and the file you had loaded.
 Firmware:
 
     cd firmware/daisy-pod
-    make
-    dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D build/PanelLink.bin
+    make app_type=BOOT_QSPI
 
-The app can reboot itself into the bootloader with the `Z` verb, so no BOOT press is
-needed after the first flash.
+The app is linked for the Daisy bootloader and lives in the 8 MB QSPI flash, so the
+128 KB of internal flash is no longer a limit. First install the bootloader once:
+
+    make program-boot      # bootloader into internal flash, 0x08000000
+
+then write the app to QSPI, either through the bootloader's two second window at power
+on, or with the `Z` verb, which now reboots into the bootloader and waits:
+
+    dfu-util -d 0483:df11 -a 0 -s 0x90040000:leave -D build/PanelLink.bin
 
 Panel:
 
