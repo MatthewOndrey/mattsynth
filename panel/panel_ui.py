@@ -731,6 +731,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
     <span class="lab">MIDI</span>
     <select id="hmidi" class="pbtn" style="min-width:170px; max-width:260px"></select>
     <button id="hload" class="pbtn">LOAD</button>
+    <button id="hunload" class="pbtn small">UNLOAD</button>
     <button id="gplay" class="pbtn">PLAY</button>
     <span id="songpos" style="font:600 12px ui-monospace,monospace;color:#7fd1ff;min-width:74px"></span>
     <div id="bpmwrap"><span class="lab">BPM</span>
@@ -1389,7 +1390,7 @@ function engSpec(mode){
 const ALL_MODES = ["seq", "arp", "eu", "roll", "clips", "drone"];
 /* which tabs follow the header PLAY. Only the two that write music start on; the rest
    are opt in, so pressing play never drags an arpeggio along by surprise. */
-const tabsOn = { seq:true, arp:false, eu:false, roll:false, clips:true, drone:false, midi:true };
+const tabsOn = { seq:true, arp:false, eu:false, roll:false, clips:true, drone:false, midi:false };
 
 function arpFiring(step, when, dur){
   const notes = arpNotes();
@@ -1530,9 +1531,8 @@ function buildSeq(){
 
   const bar = document.createElement("div"); bar.className = "seqbar";
   const play = document.createElement("button");
-  play.id = "seqplay"; play.textContent = tOn("seq") ? "STOP" : "PLAY";
-  if(tOn("seq")) play.classList.add("on");
-  play.onclick = ()=> tOn("seq") ? seqStop() : seqStart();
+  play.id = "seqplay";
+  play.onclick = ()=> playAlong("seq");   /* the header transport owns playback now */
   bar.appendChild(play);
 
   const mkLab = (t)=>{ const s=document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
@@ -1675,6 +1675,7 @@ function buildSeq(){
     wrap.appendChild(row);
   }
   v.appendChild(wrap);
+  paintPlay();   /* the switch shows its state on the way in */
 }
 
 function refreshSeqCells(){
@@ -5451,6 +5452,12 @@ function paintGplay(){
   b.textContent = on ? "■" : "▶";
   b.classList.toggle("on", on);
 }
+document.getElementById("hunload").onclick = ()=>{
+  if(typeof midi !== "undefined"){ midiStop(); midi.evs = []; midi.endMs = 0; midi.name = ""; }
+  const sel = document.getElementById("hmidi"); if(sel) sel.selectedIndex = -1;
+  paintMidi(); paintGplay(); saveState();
+};
+
 document.getElementById("gplay").onclick = ()=>{
   /* one transport: it stops everything, or starts every tab that is switched to play
      along, and the midi file with them */
@@ -5462,7 +5469,7 @@ document.getElementById("gplay").onclick = ()=>{
   }
   transport.global = true;
   startEngine(view);
-  if(tabsOn.midi !== false && midi.evs && midi.evs.length) midiPlay();
+  if(tabsOn.midi === true && midi.evs && midi.evs.length) midiPlay();
   paintPlay(); paintGplay();
 };
 
@@ -5876,7 +5883,7 @@ function snapshot(){
     clipsState: { active: clips.active, items: clips.items },
     seq: { pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn },
     micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
-    gmode: true, tabsOn: tabsOn,
+    gmode: true,
     range: {lo0:num("lo0"), hi0:num("hi0"), lo1:num("lo1"), hi1:num("hi1")},
     fx,
     seq: {len:seq.len, bar:seq.bar, swing:seq.swing,
@@ -5904,7 +5911,7 @@ function applyState(s){
   if(s.wtf) setTimeout(()=>{ wtLoadFile(s.wtf).catch(()=>{}); }, 700);
   if(typeof s.partSplit === "number") midi.partSplit = s.partSplit;
   if(typeof s.bank === "string" && s.bank) savedBank = s.bank;
-  if(s.midi) setTimeout(()=>{ midiLoadFile(s.midi).catch(()=>{}); }, 900);
+  /* a midi file is never restored: you load one when you want to hear it */
   /* the patterns and the chain come back with everything else */
   if(typeof s.pianoOn === "boolean") setTimeout(()=>{ pianoOn = s.pianoOn; send("P 37 " + (pianoOn ? 1 : 0)); }, 900);
   if(s.clipsState && Array.isArray(s.clipsState.items) && s.clipsState.items.length === 16){
@@ -5990,7 +5997,9 @@ function applyState(s){
     if(typeof s.micro.root === "number") micro.root = ((s.micro.root % 12) + 12) % 12;
   }
   transport.global = true;
-  if(s.tabsOn) Object.keys(tabsOn).forEach(k=>{ if(typeof s.tabsOn[k] === "boolean") tabsOn[k] = s.tabsOn[k]; });
+  /* the play along switches start from the defaults every boot: a stale saved set has
+     bitten us once already, and a silent tab is easier to spot than a mystery lane */
+  Object.assign(tabsOn, { seq:true, arp:false, eu:false, roll:false, clips:true, drone:false, midi:false });
   paintGlobal();
   if(s.range){
     Object.keys(s.range).forEach(k=>{
