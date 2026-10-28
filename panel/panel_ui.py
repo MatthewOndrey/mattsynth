@@ -1223,7 +1223,7 @@ function buildKalimba(){
 /* The bottom left corner of every grid pad is a latch. Hold corners on two or more
    pads and the notes cycle, up then down, one sixteenth of the global tempo per step.
    The corners are pointer targets in their own right, so the pad itself still plays. */
-const gArp = { held:new Map(), timer:null, step:0, playing:false, sustain:-1 };
+const gArp = { held:new Map(), timer:null, step:0, playing:false, sustain:-1, last:-1 };
 
 function gArpMs(){ return 60000 / Math.max(30, bpm | 0) / 4; }
 
@@ -1245,6 +1245,7 @@ function gArpStopTimer(){
 
 function gArpSilence(){
   if(gArp.sustain >= 0){ send("O " + gArp.sustain); gArp.sustain = -1; }
+  if(gArp.last >= 0){ send("K " + gArp.last); gArp.last = -1; }
 }
 
 function gArpStop(){
@@ -1257,8 +1258,13 @@ function gArpTick(){
   const order = gArpOrder();
   if(!order.length){ gArpStop(); return; }
   const n = order[gArp.step % order.length];
+  /* free the note the arp played last, by name, so the arp never holds more than one
+     voice of its own: otherwise a fast arp eats the pool and steals what you are
+     playing by hand */
+  if(gArp.last >= 0 && gArp.last !== n) send("K " + gArp.last);
+  gArp.last = n;
   send("N " + n + " 104 " + part);
-  setTimeout(()=> send("O " + n), Math.max(40, gArpMs() * 0.8));
+  setTimeout(()=> send("O " + n), Math.max(40, gArpMs() * 0.55));
   /* light the pad that owns this note */
   document.querySelectorAll(".pad.arpFire").forEach(e=> e.classList.remove("arpFire"));
   const hit = Array.from(document.querySelectorAll("#grid .pad")).find(e=> +e.dataset.note === n);
