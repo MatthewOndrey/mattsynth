@@ -2796,6 +2796,8 @@ setInterval(()=>{
 }, 60);
 
 function buildWt(){
+  /* pick up wave sets added since boot */
+  try { loadWtFiles(); } catch(e) {}
   const v = document.getElementById("view"); v.innerHTML = "";
   const wrap = document.createElement("div"); wrap.id = "wtwrap";
 
