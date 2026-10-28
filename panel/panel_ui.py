@@ -4433,10 +4433,11 @@ function hexGrid(container){
    16 or 32 sixteenths per part, a song is a chain of patterns, and everything is sent
    with a 40 ms lookahead so a slow frame cannot make the groove limp. */
 const sq = { pats: [], cur: 0, song: [], songOn: false, playing: false,
-             step: 0, pat: 0, rep: 0, t0: 0, nxt: 0, timer: null, held: [] };
+             step: 0, pat: 0, rep: 0, t0: 0, nxt: 0, timer: null, held: [],
+             sel: { s: 0, part: 0 }, clip: null, chainSel: 0 };
 
 function sqPat(i){
-  while(sq.pats.length <= i) sq.pats.push({ len: 16, ev: [] });
+  while(sq.pats.length <= i) sq.pats.push({ len: 16, ev: [], swing: 0 });
   return sq.pats[i];
 }
 sqPat(0);
@@ -4477,7 +4478,9 @@ function sqTick(){
         }
       }
     }
-    sq.nxt += ms;
+    /* swing: push the off sixteenths late by the pattern's percentage */
+    const sw = (sqPat(p).swing || 0) / 100;
+    sq.nxt += ms + (sq.step % 2 ? 0 : sw * ms);
   }
   if(view === "song") paintSongPlayhead();
 }
@@ -4506,87 +4509,152 @@ function paintSongPlayhead(){
   });
 }
 
+function sqSelEv(){
+  const p = sqPat(sq.cur);
+  return p.ev.find(e=> e.s === sq.sel.s && (e.part || 0) === sq.sel.part) || null;
+}
+
 function buildSong(){
   const v = document.getElementById("view");
   v.innerHTML = "";
   const wrap = document.createElement("div");
-  wrap.id = "song"; wrap.style.cssText = "display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-height:0;";
-  const bar = document.createElement("div"); bar.className = "seqbar";
-  bar.style.flexWrap = "wrap";
-
+  wrap.id = "song";
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-height:0;";
+  const bar = document.createElement("div"); bar.className = "seqbar"; bar.style.flexWrap = "wrap";
   const lab = (t)=>{ const s = document.createElement("span"); s.className="lab"; s.textContent=t; return s; };
+  const btn = (t, on, fn)=>{ const b = document.createElement("button"); b.textContent = t;
+                             if(on) b.classList.add("on"); b.onclick = fn; bar.appendChild(b); return b; };
 
+  const pat = sqPat(sq.cur);
   bar.appendChild(lab("PAT"));
-  for(let i = 0; i < 16; i++){
-    const b = document.createElement("button");
-    b.textContent = String(i + 1);
-    if(i === sq.cur) b.classList.add("on");
-    b.onclick = ()=>{ sq.cur = i; buildSong(); };
+  for(let i2 = 0; i2 < 16; i2++){
+    const b = document.createElement("button"); b.textContent = String(i2 + 1);
+    if(i2 === sq.cur) b.classList.add("on");
+    b.onclick = ()=>{ sq.cur = i2; buildSong(); };
     bar.appendChild(b);
   }
-  bar.appendChild(lab("ST"));
-  [16, 32].forEach(n=>{
-    const b = document.createElement("button");
-    b.textContent = n;
-    if(sqPat(sq.cur).len === n) b.classList.add("on");
-    b.onclick = ()=>{ sqPat(sq.cur).len = n; buildSong(); saveState(); };
-    bar.appendChild(b);
+  bar.appendChild(lab("LEN"));
+  [16, 32, 64].forEach(n=>{
+    btn(String(n), pat.len === n, ()=>{ pat.len = n; if(sq.sel.s >= n) sq.sel.s = n - 1; buildSong(); saveState(); });
   });
-  const clr = document.createElement("button"); clr.textContent = "CLEAR";
-  clr.onclick = ()=>{ sqPat(sq.cur).ev = []; buildSong(); saveState(); };
-  bar.appendChild(clr);
+  bar.appendChild(lab("SWING"));
+  const sw = document.createElement("input");
+  sw.type = "range"; sw.min = 0; sw.max = 60; sw.step = 4; sw.value = pat.swing || 0;
+  sw.style.width = "90px"; sw.id = "sqswing";
+  const swl = document.createElement("span"); swl.className = "lab"; swl.textContent = (pat.swing || 0) + "%";
+  sw.oninput = ()=>{ pat.swing = +sw.value; swl.textContent = sw.value + "%"; };
+  sw.onchange = ()=> saveState();
+  bar.appendChild(sw); bar.appendChild(swl);
+
+  btn("CLR A", false, ()=>{ pat.ev = pat.ev.filter(e=> (e.part || 0) !== 0); buildSong(); saveState(); });
+  btn("CLR B", false, ()=>{ pat.ev = pat.ev.filter(e=> (e.part || 0) !== 1); buildSong(); saveState(); });
+  btn("COPY", false, ()=>{ sq.clip = pat.ev.filter(e=> (e.part || 0) === sq.sel.part).map(e=> Object.assign({}, e)); });
+  btn("PASTE", false, ()=>{
+    if(!sq.clip || !sq.clip.length) return;
+    pat.ev = pat.ev.filter(e=> (e.part || 0) !== sq.sel.part).concat(sq.clip.map(e=> Object.assign({}, e)));
+    buildSong(); saveState();
+  });
+  btn("CLEAR", false, ()=>{ pat.ev = []; buildSong(); saveState(); });
+
   const pl = document.createElement("button"); pl.id = "sqplay";
-  pl.textContent = sq.playing ? "■" : "▶";
-  if(sq.playing) pl.classList.add("on");
-  pl.onclick = ()=> sq.playing ? sqStop() : sqPlay();
-  bar.appendChild(pl);
-  const sm = document.createElement("button");
-  sm.textContent = sq.songOn ? "SONG" : "PATTERN";
-  if(sq.songOn) sm.classList.add("on");
-  else sm.classList.remove("on");
-  sm.onclick = ()=>{ sq.songOn = !sq.songOn; buildSong(); saveState(); };
-  bar.appendChild(sm);
-  const add = document.createElement("button"); add.textContent = "+CH";
-  add.onclick = ()=>{ sq.song.push({ p: sq.cur, r: 2 }); buildSong(); saveState(); };
-  bar.appendChild(add);
-  const pop = document.createElement("button"); pop.textContent = "-CH";
-  pop.onclick = ()=>{ sq.song.pop(); buildSong(); saveState(); };
-  bar.appendChild(pop);
-  bar.appendChild(lab(sq.song.map(e=> (e.p + 1) + "x" + (e.r || 1)).join(" ")));
+  pl.textContent = sq.playing ? "\u25a0" : "\u25b6"; if(sq.playing) pl.classList.add("on");
+  pl.onclick = ()=> sq.playing ? sqStop() : sqPlay(); bar.appendChild(pl);
+
+  btn(sq.songOn ? "SONG" : "PATT", sq.songOn, ()=>{ sq.songOn = !sq.songOn; buildSong(); saveState(); });
+  btn("+CH", false, ()=>{ sq.song.push({ p: sq.cur, r: 2 }); buildSong(); saveState(); });
+  btn("-CH", false, ()=>{ sq.song.pop(); buildSong(); saveState(); });
+  const pos = document.createElement("span"); pos.id = "sqpos"; pos.className = "lab";
+  pos.style.marginLeft = "auto";
+  pos.textContent = "P" + (sq.cur + 1) + " \u00b7 " + (sq.step + 1) + "/" + pat.len;
+  bar.appendChild(pos);
   wrap.appendChild(bar);
+
+  if(sq.song.length){
+    const ch = document.createElement("div"); ch.className = "seqbar"; ch.style.flexWrap = "wrap";
+    ch.appendChild(lab("CHAIN"));
+    sq.song.forEach((e, i3)=>{
+      const b = document.createElement("button"); b.textContent = (e.p + 1) + " x" + (e.r || 1);
+      if(i3 === sq.chainSel) b.classList.add("on");
+      b.onclick = ()=>{ sq.chainSel = i3; buildSong(); };
+      ch.appendChild(b);
+    });
+    ch.appendChild(lab("REPS"));
+    const dec = document.createElement("button"); dec.textContent = "\u2212";
+    dec.onclick = ()=>{ const e = sq.song[sq.chainSel]; if(e){ e.r = Math.max(1, (e.r || 1) - 1); buildSong(); saveState(); } };
+    ch.appendChild(dec);
+    const inc = document.createElement("button"); inc.textContent = "+";
+    inc.onclick = ()=>{ const e = sq.song[sq.chainSel]; if(e){ e.r = Math.min(16, (e.r || 1) + 1); buildSong(); saveState(); } };
+    ch.appendChild(inc);
+    wrap.appendChild(ch);
+  }
 
   const grid = document.createElement("div");
   grid.id = "sqgrid";
-  grid.style.cssText = "display:grid;grid-template-columns:repeat(16,1fr);gap:3px;padding:4px 2px;";
-  const len = sqPat(sq.cur).len;
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(" + pat.len + ",1fr);gap:2px;padding:2px;";
   for(let part = 0; part < 2; part++){
-    for(let st = 0; st < len; st++){
+    for(let st = 0; st < pat.len; st++){
       const c = document.createElement("div");
+      const hit = pat.ev.find(e=> e.s === st && (e.part || 0) === part);
+      const sel = sq.sel.s === st && sq.sel.part === part;
       c.className = "sqc";
-      const hit = sqPat(sq.cur).ev.find(e=> e.s === st && (e.part || 0) === part);
       c.dataset.s = st; c.dataset.p = part;
-      c.style.cssText = "height:" + (part ? 54 : 54) + "px;border-radius:6px;display:flex;" +
-        "align-items:center;justify-content:center;font:600 11px system-ui;" +
-        "background:" + (hit ? (part ? "#1d4d3a" : "#2a3f63") : "#131c22") + ";" +
-        "color:" + (hit ? "#cfe9ff" : "#3b4d58") + ";border:1px solid #1b2a30;cursor:pointer;" +
-        "user-select:none;";
-      c.textContent = hit ? NOTE[hit.n % 12] + (hit.n < 60 ? "·" : "") : String(st + 1);
-      c.onclick = ()=>{
-        const p = sqPat(sq.cur);
-        const i = p.ev.findIndex(e=> e.s === st && (e.part || 0) === part);
-        if(i >= 0) p.ev.splice(i, 1);
-        else p.ev.push({ s: st, part: part, n: keySel, v: 100, len: 1 });
-        buildSong(); saveState();
-      };
+      c.style.cssText = "height:44px;border-radius:5px;display:flex;flex-direction:column;" +
+        "align-items:center;justify-content:center;font:600 11px system-ui;cursor:pointer;" +
+        "user-select:none;border:1px solid " + (sel ? "#7fd1ff" : "#1b2a30") + ";" +
+        "background:" + (hit ? (part ? "#1d4d3a" : "#26395c") : "#101920") + ";" +
+        "color:" + (hit ? "#e8f6ff" : "#33454f") + ";";
+      if(hit){
+        c.textContent = NOTE[hit.n % 12] + (Math.floor(hit.n / 12) - 1);
+        const sm = document.createElement("small");
+        sm.style.cssText = "font-size:9px;opacity:.75";
+        sm.textContent = (hit.v || 96) + "\u00b7" + (hit.len || 1);
+        c.appendChild(sm);
+      } else {
+        c.textContent = String(st + 1);
+      }
+      c.onclick = ()=>{ sq.sel = { s: st, part: part }; buildSong(); };
       grid.appendChild(c);
     }
   }
   wrap.appendChild(grid);
-  const hint = document.createElement("div");
-  hint.style.cssText = "color:#5a6f7a;font:12px system-ui;padding:2px 4px;";
-  hint.textContent = "click a cell to place the note chosen in the header, click again to remove. " +
-                     "CHAIN + adds the current pattern twice to the song; SONG toggles chain playback.";
-  wrap.appendChild(hint);
+
+  const ed = document.createElement("div"); ed.className = "seqbar"; ed.style.flexWrap = "wrap";
+  const ev = sqSelEv();
+  ed.appendChild(lab(ev ? "STEP " + (ev.s + 1) + (ev.part ? " B" : " A") : "SELECT A STEP"));
+  if(ev){
+    const nudge = (d)=>{ ev.n = Math.max(12, Math.min(120, ev.n + d)); buildSong(); saveState(); };
+    const nb = document.createElement("button"); nb.textContent = "\u2212"; nb.onclick = ()=> nudge(-1); ed.appendChild(nb);
+    const nl = document.createElement("span"); nl.className = "lab"; nl.style.minWidth = "52px";
+    nl.textContent = NOTE[ev.n % 12] + (Math.floor(ev.n / 12) - 1); ed.appendChild(nl);
+    const pb = document.createElement("button"); pb.textContent = "+"; pb.onclick = ()=> nudge(1); ed.appendChild(pb);
+
+    ed.appendChild(lab("VEL"));
+    const vel = document.createElement("input"); vel.type = "range"; vel.min = 20; vel.max = 127;
+    vel.value = ev.v || 96; vel.style.width = "120px";
+    vel.oninput = ()=>{ ev.v = +vel.value; };
+    vel.onchange = ()=> saveState();
+    ed.appendChild(vel);
+
+    ed.appendChild(lab("LEN"));
+    const ld = document.createElement("button"); ld.textContent = "\u2212";
+    ld.onclick = ()=>{ ev.len = Math.max(1, (ev.len || 1) - 1); buildSong(); saveState(); }; ed.appendChild(ld);
+    const lv = document.createElement("span"); lv.className = "lab"; lv.style.minWidth = "24px";
+    lv.textContent = ev.len || 1; ed.appendChild(lv);
+    const li = document.createElement("button"); li.textContent = "+";
+    li.onclick = ()=>{ ev.len = Math.min(16, (ev.len || 1) + 1); buildSong(); saveState(); }; ed.appendChild(li);
+
+    const del = document.createElement("button"); del.textContent = "DEL";
+    del.onclick = ()=>{ const p2 = sqPat(sq.cur); p2.ev = p2.ev.filter(e=> e !== ev); buildSong(); saveState(); };
+    ed.appendChild(del);
+  } else {
+    const add = document.createElement("button"); add.textContent = "PLACE " + NOTE[keySel % 12];
+    /* the header key is a note class, so place it in the middle octave */
+    const pn = keySel < 12 ? 60 + (keySel | 0) : Math.max(24, Math.min(96, keySel));
+    add.onclick = ()=>{ sqPat(sq.cur).ev.push({ s: sq.sel.s, part: sq.sel.part, n: pn, v: 100, len: 1 });
+                        buildSong(); saveState(); };
+    ed.appendChild(add);
+  }
+  wrap.appendChild(ed);
   v.appendChild(wrap);
   paintSongPlayhead();
 }
