@@ -14,8 +14,13 @@ N = 512
 OUT = "/home/matto/wt"
 os.makedirs(OUT, exist_ok=True)
 
-def frame(harm, rolloff=24.0):
-    """harm: list of amplitudes per harmonic. Rolloff is a soft knee above that partial."""
+def frame(harm, rolloff=14.0):
+    """harm: list of amplitudes per harmonic. Rolloff is a soft knee above that partial.
+
+    Fourteen partials is deliberate: the engine has no mip levels, so a table with forty
+    eight harmonics aliases badly in the top two octaves. Fourteen keeps the top clean at
+    the cost of some bite, which is the right trade for a touch panel with no filters on
+    the table."""
     buf, peak = [], 0.0
     for i in range(N):
         th = 2 * math.pi * i / N
