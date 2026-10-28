@@ -1245,8 +1245,8 @@ function gArpStopTimer(){
 }
 
 function gArpSilence(){
-  if(gArp.sustain >= 0){ send("O " + gArp.sustain); gArp.sustain = -1; }
-  if(gArp.last >= 0){ send("K " + gArp.last); gArp.last = -1; }
+  if(gArp.sustain >= 0){ send("O " + gArp.sustain + " 0 1"); gArp.sustain = -1; }
+  if(gArp.last >= 0){ send("O " + gArp.last + " 0 1"); gArp.last = -1; }
 }
 
 function gArpStop(){
@@ -1262,10 +1262,11 @@ function gArpTick(){
   /* free the note the arp played last, by name, so the arp never holds more than one
      voice of its own: otherwise a fast arp eats the pool and steals what you are
      playing by hand */
-  if(gArp.last >= 0 && gArp.last !== n) send("K " + gArp.last);
   gArp.last = n;
-  send("N " + n + " 104 " + part);
-  setTimeout(()=> send("O " + n), Math.max(40, gArpMs() * 0.55));
+  /* tag 1 marks this voice as the arpeggiator's own, so its note off can never end a
+     note you are holding by hand, even on the same pitch */
+  send("N " + n + " 104 " + part + " 0 1");
+  setTimeout(()=> send("O " + n + " 0 1"), Math.max(40, gArpMs() * 0.55));
   /* light the pad that owns this note */
   document.querySelectorAll(".pad.arpFire").forEach(e=> e.classList.remove("arpFire"));
   const hit = Array.from(document.querySelectorAll("#grid .pad")).find(e=> +e.dataset.note === n);
@@ -1289,7 +1290,7 @@ function gArpSync(){
     gArpStopTimer();
     if(gArp.sustain !== n[0]){
       gArpSilence();
-      send("N " + n[0] + " 108 " + part);
+      send("N " + n[0] + " 108 " + part + " 0 1");
       gArp.sustain = n[0];
     }
   } else {
@@ -5071,7 +5072,17 @@ document.addEventListener("pointerup", releasePointer);
 document.addEventListener("pointercancel", releasePointer);
 /* capture can be lost without a pointerup (view rebuilt under the finger,
    browser gesture, device quirk): none of these may leave a note hanging */
-document.addEventListener("lostpointercapture", releasePointer);
+/* capture can also be lost when a *second* finger arrives, and that must not stop the
+   note the first finger is still holding: only release if that finger has really left
+   the pad it went down on */
+document.addEventListener("lostpointercapture", (ev)=>{
+  const f = fingers.get(ev.pointerId);
+  if(f && f.el){
+    const under = document.elementFromPoint(ev.clientX || 0, ev.clientY || 0);
+    if(under && (under === f.el || f.el.contains(under))) return;
+  }
+  releasePointer(ev);
+});
 document.addEventListener("touchcancel", ()=>releaseAll(), true);
 document.addEventListener("touchend", (ev)=>{
   if(!ev.touches || ev.touches.length === 0) releaseAll();

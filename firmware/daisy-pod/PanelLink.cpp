@@ -65,12 +65,12 @@ struct SynthHost
     bool       wt_mode = false;
 
     void Init(float sr)          { fm.Init(sr); wts.Init(sr); }
-    void NoteOn(uint8_t n, uint8_t v, uint8_t p = 0, int cents = 0)
+    void NoteOn(uint8_t n, uint8_t v, uint8_t p = 0, int cents = 0, uint8_t tag = 0)
     {
         if(wt_mode){ wts.NoteOn(n, v, p); if(cents) wts.Bend(p, n, (float)cents); }
-        else fm.NoteOn(n, v, p, cents);
+        else fm.NoteOn(n, v, p, cents, tag);
     }
-    void NoteOff(uint8_t n, int c = -1)          { wt_mode ? wts.NoteOff(n, c) : fm.NoteOff(n, c); }
+    void NoteOff(uint8_t n, int c = -1, uint8_t tag = 0) { wt_mode ? wts.NoteOff(n, c) : fm.NoteOff(n, c, tag); }
     void KillNote(uint8_t n)     { wt_mode ? wts.KillNote(n) : fm.KillNote(n); }
     void AllOff()                { wt_mode ? wts.AllOff() : fm.AllOff(); }
     void Bend(int p, int n, float c) { wt_mode ? wts.Bend(p, n, c) : fm.Bend(p, n, c); }
@@ -696,8 +696,8 @@ static void handle(const char* body)
     {
         case 'N':
             {
-                int part = 0, cents = 0;
-                const int n = sscanf(body, "N %d %d %d %d", &a, &b, &part, &cents);
+                int part = 0, cents = 0, tag = 0;
+                const int n = sscanf(body, "N %d %d %d %d %d", &a, &b, &part, &cents, &tag);
                 if(n >= 2)
                 {
                     /* notes 36..43 are the kit while it is armed */
@@ -718,7 +718,8 @@ static void handle(const char* body)
                     held_notes++;
                     synth.NoteOn((uint8_t)clampi(a, 0, 127), (uint8_t)clampi(b, 0, 127),
                                  n >= 3 ? clampi(part, 0, 1) : 0,
-                                 n >= 4 ? cents : 0);
+                                 n >= 4 ? cents : 0,
+                                 n >= 5 ? (uint8_t)clampi(tag, 0, 1) : 0);
                 }
             }
             break;
@@ -742,13 +743,14 @@ static void handle(const char* body)
             break;
         case 'O':
             {
-                int cents = -1;
-                const int n = sscanf(body, "O %d %d", &a, &cents);
+                int cents = -1, tag = 0;
+                const int n = sscanf(body, "O %d %d %d", &a, &cents, &tag);
                 if(n >= 1)
                 {
                     if(held_notes > 0)
                         held_notes--;
-                    synth.NoteOff((uint8_t)clampi(a, 0, 127), n >= 2 ? cents : -1);
+                    synth.NoteOff((uint8_t)clampi(a, 0, 127), n >= 2 ? cents : -1,
+                                  n >= 3 ? (uint8_t)clampi(tag, 0, 1) : 0);
                 }
             }
             break;

@@ -49,6 +49,7 @@ struct Voice
     bool     active;
     bool     held;
     uint8_t  note;
+    uint8_t  tag;        /* 0 played by hand, 1 arpeggiator */
     uint32_t age;
     float    inc[kOps];
     float    amp[kOps];
@@ -176,7 +177,7 @@ class Engine
         fb_gain_[part] = (f01 < 0.f ? 0.f : f01 > 1.f ? 1.f : f01) * 0.85f;
     }
 
-    void NoteOn(uint8_t note, uint8_t vel, int part = 0, int cents = 0)
+    void NoteOn(uint8_t note, uint8_t vel, int part = 0, int cents = 0, uint8_t tag = 0)
     {
         if(part < 0 || part >= kParts)
             part = 0;
@@ -186,6 +187,7 @@ class Engine
         v->note   = note;
         v->part   = (uint8_t)part;
         v->cents  = (int16_t)clampi16(cents);
+        v->tag    = tag;
         v->bend   = powf(2.0f, (float)v->cents / 1200.0f);
         v->rel_at = 0;
         v->age    = ++age_;
@@ -243,12 +245,13 @@ class Engine
     /* cents < 0 releases every voice of that note; otherwise only the voice that
        was started with exactly that offset, so 24-EDO quarter tones sharing a note
        number release independently */
-    void NoteOff(uint8_t note, int cents = -1)
+    void NoteOff(uint8_t note, int cents = -1, uint8_t tag = 0)
     {
         for(int i = 0; i < kVoices; ++i)
         {
             Voice& v = voices_[i];
-            if(v.active && v.held && v.note == note && (cents < 0 || v.cents == (int16_t)cents))
+            if(v.active && v.held && v.note == note && (cents < 0 || v.cents == (int16_t)cents)
+                && (tag == 0 || v.tag == tag))
             {
                 v.held = false;
                 v.rel_at = v.samples;
