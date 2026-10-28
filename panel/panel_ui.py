@@ -720,6 +720,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
     <select id="hmidi" class="pbtn" style="min-width:170px; max-width:260px"></select>
     <button id="hload" class="pbtn">LOAD</button>
     <button id="gplay" class="pbtn">PLAY</button>
+    <span id="songpos" style="font:600 12px ui-monospace,monospace;color:#7fd1ff;min-width:74px"></span>
     <div id="bpmwrap"><span class="lab">BPM</span>
       <input id="bpm" type="number" min="60" max="200" step="1" value="120"></div>
     <div id="volwrap">
@@ -4482,6 +4483,12 @@ function sqTick(){
     const sw = (sqPat(p).swing || 0) / 100;
     sq.nxt += ms + (sq.step % 2 ? 0 : sw * ms);
   }
+  const sp = document.getElementById("songpos");
+  if(sp){
+    const pn = sq.songOn ? (sq.song[sq.pat] ? sq.song[sq.pat].p : 0) : sq.cur;
+    sp.textContent = sq.songOn ? ("S" + (sq.pat + 1) + " P" + (pn + 1) + " " + (sq.step + 1))
+                               : ("P" + (pn + 1) + " " + (sq.step + 1));
+  }
   if(view === "song") paintSongPlayhead();
 }
 
@@ -4496,6 +4503,7 @@ function sqStop(){
   if(sq.timer) clearInterval(sq.timer);
   sq.timer = null; sq.playing = false;
   sq.held.forEach(t=>clearTimeout(t)); sq.held = [];
+  const sp0 = document.getElementById("songpos"); if(sp0) sp0.textContent = "";
   send("R");
   paintSong();
 }
