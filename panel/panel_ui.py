@@ -761,6 +761,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
       <button data-v="rand">RAND</button>
       <button data-v="clips">CLIPS</button>
       <button data-v="song">SONG</button>
+      <button data-v="kit">KIT</button>
       <span id="hint">pads: y = velocity, drag = filter</span>
     </div>
     <div id="view"></div>
@@ -4672,6 +4673,57 @@ function paintSong(){
   if(b){ b.textContent = sq.playing ? "■" : "▶"; b.classList.toggle("on", sq.playing); }
 }
 
+function buildKit(){
+  const v = document.getElementById("view");
+  v.innerHTML = "";
+  send("P 36 1");                       /* the pads only sound while the kit is armed */
+
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:10px;flex:1 1 auto;min-height:0;";
+  const bar = document.createElement("div"); bar.className = "seqbar"; bar.style.flexWrap = "wrap";
+  const lab = (t)=>{ const s = document.createElement("span"); s.className = "lab"; s.textContent = t; return s; };
+  bar.appendChild(lab("KIT"));
+  const nm = ["KICK","SNARE","HAT","CLAP","TOM","RIM","BASS","CHORD"];
+  const off = document.createElement("button"); off.textContent = "DISARM";
+  off.onclick = ()=>{ send("P 36 0"); };
+  bar.appendChild(off);
+  const all = document.createElement("button"); all.textContent = "PANIC";
+  all.onclick = ()=>{ send("R"); };
+  bar.appendChild(all);
+  bar.appendChild(lab("notes 36 to 43, eight one shots from QSPI, copied to SDRAM at boot"));
+  wrap.appendChild(bar);
+
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:6px;flex:1 1 auto;";
+  nm.forEach((name, i)=>{
+    const b = document.createElement("div");
+    const hue = 200 - i * 18;
+    b.style.cssText = "border-radius:14px;display:flex;flex-direction:column;align-items:center;" +
+      "justify-content:center;font:700 26px system-ui;letter-spacing:.06em;cursor:pointer;" +
+      "user-select:none;color:#eaf6ff;border:1px solid rgba(255,255,255,.18);" +
+      "background:radial-gradient(120% 90% at 30% 15%, rgba(255,255,255,.28), rgba(255,255,255,0) 50%)," +
+      "linear-gradient(165deg, hsl(" + hue + ",60%,38%), hsl(" + hue + ",65%,18%));" +
+      "box-shadow:inset 0 2px 6px rgba(255,255,255,.25), inset 0 -10px 20px rgba(0,0,0,.5), 0 6px 14px rgba(0,0,0,.45);";
+    b.textContent = name;
+    const sub = document.createElement("small");
+    sub.style.cssText = "font:500 12px system-ui;opacity:.7;margin-top:6px";
+    sub.textContent = "note " + (36 + i);
+    b.appendChild(sub);
+    const hit = (ev)=>{
+      ev.preventDefault();
+      b.style.transform = "scale(.97)";
+      b.style.filter = "brightness(1.35)";
+      send("N " + (36 + i) + " 118 0");
+      setTimeout(()=>{ b.style.transform = ""; b.style.filter = ""; }, 110);
+    };
+    b.addEventListener("pointerdown", hit);
+    grid.appendChild(b);
+  });
+  wrap.appendChild(grid);
+  v.appendChild(wrap);
+}
+
+
 function renderView(){
   if(fingers.size) releaseAll();
   if(typeof heldNote !== "undefined" && heldNote >= 0) releaseHeldNote();
@@ -4689,6 +4741,7 @@ function renderView(){
   else if(view==="rand") buildRand();
   else if(view==="clips") buildClips();
   else if(view==="song") buildSong();
+  else if(view==="kit") buildKit();
   else if(view==="grid") buildGrid();
   else if(view==="chroma") buildChroma();
   else if(view==="micro") buildMicro();

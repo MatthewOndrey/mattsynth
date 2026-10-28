@@ -37,6 +37,10 @@
 
 #include "FmEngine.h"
 #include "WtEngine.h"
+#include "KitEngine.h"
+
+static bool kit_on = false;
+KitEngine kit;
 #include "fm_patch.h"
 
 #include <cmath>
@@ -693,6 +697,12 @@ static void handle(const char* body)
                 const int n = sscanf(body, "N %d %d %d %d", &a, &b, &part, &cents);
                 if(n >= 2)
                 {
+                    /* notes 36..43 are the kit while it is armed */
+                    if(kit_on && a >= 36 && a <= 43)
+                    {
+                        kit.Trigger(a, b);
+                        break;
+                    }
                     /* latch any pending delay edit on a note started from nothing
                        held: release tails no longer block it, only legato does */
                     if(held_notes == 0)
@@ -716,7 +726,10 @@ static void handle(const char* body)
         case 'K':
             /* K <note>: hard free, used by the panel's held-note latch */
             if(sscanf(body, "K %d", &a) == 1)
+            {
+                if(kit_on && a >= 36 && a <= 43) kit.KillAll();
                 synth.KillNote((uint8_t)clampi(a, 0, 127));
+            }
             break;
         case 'O':
             {
@@ -732,7 +745,10 @@ static void handle(const char* body)
             break;
         case 'P':
             if(sscanf(body, "P %d %d", &a, &b) == 2)
-                apply_param(a, b);
+            {
+                if(a == 36) { kit_on = (b != 0); if(!kit_on) kit.KillAll(); }
+                else apply_param(a, b);
+            }
             break;
         case 'T':
             {
@@ -820,6 +836,8 @@ static void AudioCallback(AudioHandle::InterleavingInputBuffer  in,
         frames = 64;
 
     synth.Render(l, r, frames);
+    if(kit_on)
+        kit.Render(l, r, frames);
 
     /* diagnostic: a plain sine through the same output stage. If this is silent the
        problem is downstream of the engines, in the codec, the cable or the amp. */
@@ -888,6 +906,7 @@ static IWDG_HandleTypeDef hiwdg;
 int main(void)
 {
     hw.Init();
+    kit.Init();
     /* say where the code is running from: internal flash or the QSPI boot image */
     send_msg(System::GetProgramMemoryRegion() == System::MemoryRegion::INTERNAL_FLASH
              ? "@BOOT int" : "@BOOT qspi");
