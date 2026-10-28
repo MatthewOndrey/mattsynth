@@ -734,7 +734,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
     <button id="gplay" class="pbtn">PLAY</button>
     <span id="songpos" style="font:600 12px ui-monospace,monospace;color:#7fd1ff;min-width:74px"></span>
     <div id="bpmwrap"><span class="lab">BPM</span>
-      <input id="bpm" type="number" min="60" max="200" step="1" value="120"></div>
+      <input id="bpm" type="number" min="40" max="240" step="1" value="120" style="display:none">
+      <div id="bpmknob"></div></div>
     <div id="volwrap">
       <span class="lab">VOL</span>
       <input id="vol" type="range" min="0" max="100" value="100">
@@ -5216,17 +5217,39 @@ function refreshMidiLists(){
 function bpmApply(fromUi){
   const be = document.getElementById("bpm");
   if(!be) return;
-  const v = Math.max(60, Math.min(200, parseInt(be.value, 10) || 120));
+  const v = Math.max(40, Math.min(240, parseInt(be.value, 10) || 120));
   be.value = v;
   bpm = v;
   const k = document.getElementById("p12");
   if(k){ k.value = v; k.dispatchEvent(new Event("input")); }
   else send("P 12 " + v);
   if(fromUi) send("P 12 " + v);
+  if(window.__bpmKnob) window.__bpmKnob.setValue(v);
 }
 const bpmEl = document.getElementById("bpm");
 if(bpmEl) bpmEl.addEventListener("change", ()=>bpmApply(true));
 
+
+/* the tempo is a real knob: drag it, and the number under it follows */
+(function(){
+  const host = document.getElementById("bpmknob");
+  if(!host) return;
+  host.style.cssText = "width:52px;height:52px;display:flex;align-items:center;justify-content:center;";
+  const k = makeKnob("", 40, 240, bpm, v=>{
+    const b = Math.round(v);
+    const el = document.getElementById("bpm");
+    if(el) el.value = b;
+    bpm = b;
+    send("P 12 " + b);
+    const p12 = document.getElementById("p12");
+    if(p12){ p12.value = b; const vv = document.getElementById("v12"); if(vv) vv.textContent = b; }
+  }, v=> String(Math.round(v)));
+  const lab = k.querySelector(".klab"); if(lab) lab.style.display = "none";
+  const val = k.querySelector(".kval");
+  if(val) val.style.cssText = "font:700 12px ui-monospace,monospace;color:#cfe9ff;margin-top:2px";
+  host.appendChild(k);
+  window.__bpmKnob = k;
+})();
 
 /* engine switch: the wavetable core lives in the same firmware, so this is a flag */
 function paintEng(){
