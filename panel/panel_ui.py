@@ -29,8 +29,11 @@ BANKS_DIR = os.path.expanduser("~/banks")
 WT_DIR    = os.path.expanduser("~/wt")
 os.makedirs(WT_DIR, exist_ok=True)
 MIDI_DIR = os.path.expanduser("~/midi")
+SONG_DIR = os.path.expanduser("~/songs")
 os.makedirs(MIDI_DIR, exist_ok=True)
 STATE_PATH = os.path.expanduser("~/panel_state.json")
+try: os.makedirs(SONG_DIR, exist_ok=True)
+except OSError: pass
 
 subs = []
 subs_lock = threading.Lock()
@@ -789,7 +792,7 @@ const FXK = [
   {id:"p1",  lab:"RESONANCE", min:0,  max:1000, def:550, rng:true},
   {id:"p2",  lab:"FM FB",     min:0,  max:1000, def:400},
   {id:"p6",  lab:"CHORUS",    min:0,  max:1000, def:300},
-  {id:"p7",  lab:"DELAY MIX", min:0,  max:1000, def:250},
+  {id:"p7",  lab:"DELAY MIX", min:0,  max:1000, def:0},
   {id:"p11", lab:"D. FBACK",  min:0,  max:1000, def:350},
   {id:"p12", lab:"TEMPO",     min:60, max:200,  def:120, unit:" bpm"},
   {id:"p9",  lab:"SPREAD",    min:0,  max:990,  def:300, bi:true},
@@ -4518,6 +4521,47 @@ function paintSongPlayhead(){
   });
 }
 
+
+/* ---- song files ---------------------------------------------------------- */
+function songRefresh(){
+  fetch("/songs").then(r=> r.json()).then(list=>{
+    const s = document.getElementById("songsel");
+    if(!s) return;
+    const cur = s.value;
+    s.innerHTML = "";
+    (list || []).forEach(n=>{
+      const o = document.createElement("option"); o.value = n; o.textContent = n; s.appendChild(o);
+    });
+    if(cur) s.value = cur;
+  }).catch(()=>{});
+}
+function songSave(name){
+  const payload = { v:1, pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn, bpm: bpm };
+  fetch("/song/save?f=" + encodeURIComponent(name), { method:"POST", body: JSON.stringify(payload) })
+    .then(r=> r.text()).then(t=>{
+      const el = document.getElementById("sqpos"); if(el) el.textContent = t;
+      songRefresh();
+    }).catch(()=>{});
+}
+function songLoad(name){
+  if(!name) return;
+  fetch("/song?f=" + encodeURIComponent(name)).then(r=> r.json()).then(d=>{
+    if(!d || !Array.isArray(d.pats) || !d.pats.length) return;
+    sqStop();
+    sq.pats = d.pats;
+    sq.song = Array.isArray(d.song) ? d.song : [];
+    sq.cur = d.cur | 0;
+    sq.songOn = !!d.songOn;
+    sq.sel = { s:0, part:0 };
+    if(typeof d.bpm === "number" && d.bpm >= 60 && d.bpm <= 200){
+      bpm = d.bpm;
+      const bi = document.getElementById("bpm"); if(bi) bi.value = bpm;
+      bpmApply(true);
+    }
+    buildSong(); saveState();
+  }).catch(()=>{});
+}
+
 function sqSelEv(){
   const p = sqPat(sq.cur);
   return p.ev.find(e=> e.s === sq.sel.s && (e.part || 0) === sq.sel.part) || null;
@@ -4572,6 +4616,12 @@ function buildSong(){
   btn(sq.songOn ? "PLAYING SONG" : "LOOPING PATTERN", sq.songOn, ()=>{ sq.songOn = !sq.songOn; buildSong(); saveState(); });
   btn("ADD TO CHAIN", false, ()=>{ sq.song.push({ p: sq.cur, r: 2 }); buildSong(); saveState(); });
   btn("REMOVE LAST", false, ()=>{ sq.song.pop(); buildSong(); saveState(); });
+  bar.appendChild(lab("FILE"));
+  const fsel = document.createElement("select"); fsel.id = "songsel"; fsel.className = "pbtn";
+  fsel.style.minWidth = "160px";
+  bar.appendChild(fsel);
+  btn("LOAD", false, ()=> songLoad(fsel.value));
+  btn("SAVE", false, ()=> songSave(fsel.value || "song1"));
   const pos = document.createElement("span"); pos.id = "sqpos"; pos.className = "lab";
   pos.style.marginLeft = "auto";
   pos.textContent = "P" + (sq.cur + 1) + " \u00b7 " + (sq.step + 1) + "/" + pat.len;
@@ -4683,6 +4733,7 @@ function buildSong(){
     "playing the chain from the start. Everything saves with the panel.";
   wrap.appendChild(hint);
   v.appendChild(wrap);
+  songRefresh();
   paintSongPlayhead();
 }
 
@@ -5641,6 +5692,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         if path == "/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
             self._ws_handshake()
             self._ws_loop()
@@ -5709,6 +5761,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     body = fh.read()
                 self.send_response(200)
                 self.send_header("Content-Type", "audio/midi")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+        elif path == "/songs":
+            names = []
+            try:
+                names = sorted(f[:-5] for f in os.listdir(SONG_DIR) if f.endswith(".json"))
+            except OSError:
+                pass
+            body = json.dumps(names).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/song":
+            name = os.path.basename((query.get("f") or [""])[0])
+            full = os.path.join(SONG_DIR, name + ".json")
+            if name and os.path.isfile(full):
+                with open(full, "rb") as fh:
+                    body = fh.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -5795,6 +5874,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        if path == "/song/save":
+            name = os.path.basename((query.get("f") or ["song"])[0]) or "song"
+            full = os.path.join(SONG_DIR, name + ".json")
+            try:
+                json.loads(body)                       # refuse to write junk
+                with open(full, "w", encoding="utf-8") as fh:
+                    fh.write(body)
+                out = "saved " + name
+            except Exception as exc:
+                out = "save failed: " + str(exc)
+            data = out.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
             return
         if path == "/banks/load":
             err = load_bank_file((query.get("f") or [""])[0])

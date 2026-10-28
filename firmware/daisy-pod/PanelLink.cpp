@@ -102,14 +102,14 @@ static volatile int p_patch    = 0;
 static volatile int p_chorus_m = 300;
 /* delay settings are pending until a note starts from silence: changing the
    time mid-tail sounds like a tape stop, so the update waits for the next note */
-static int          p_delay_m  = 250;
+static int          p_delay_m  = 0;
 static int          p_delay_ms = 280;
-static int          p_delay_fb = 350;
+static int          p_delay_fb = 0;
 static int          p_bpm      = 120;
 static int          held_notes = 0; /* gates the delay latch: 0 = nothing held */
 static int          p_div      = 4; /* index into kDivBeats: 0=1/16 .. 7=1/1 */
-static volatile int live_dly_mix = 250;
-static volatile int live_dly_fb  = 350;
+static volatile int live_dly_mix = 0;
+static volatile int live_dly_fb  = 0;
 /* master volume: 1000 = unity. Smoothed per sample in the callback so a drag
    does not step the whole mix and click. */
 static volatile int p_master_m = 1000;
