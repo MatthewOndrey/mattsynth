@@ -750,9 +750,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
       <button id="sustb">SUSTain off</button>
       <button id="bendb">BEND off</button>
       <span class="lab">RNG</span>
-      <input id="brange" type="range" min="50" max="2400" step="25" value="1200"
-             style="width:62px" title="cents of bend at full deflection">
-      <b id="brv" style="font:600 11px ui-monospace,monospace;color:#9fd">1200</b>
+      <input id="brange" type="range" min="0.5" max="12" step="0.5" value="2"
+             style="width:62px" title="semitones of bend at full deflection">
+      <b id="brv" style="font:600 11px ui-monospace,monospace;color:#9fd">2 st</b>
       <button id="octup">+ OCT</button>
     </div>
     <div class="hspacer"></div>
@@ -1065,7 +1065,8 @@ setInterval(()=>{
     if(c === f.sent) return;
     f.sent = c;
     bendTrail(f.lx, f.ly, c, bendRange);
-    f.notes.forEach(nn=>send("T " + part + " " + nn + " " + c));
+    const bp = (f.part !== undefined) ? f.part : part;
+    f.notes.forEach(nn=>send("T " + bp + " " + nn + " " + c));
   });
 }, 16);
 
@@ -1177,7 +1178,7 @@ function makePad(step, cls, showOct){
     const x = touchX(ev, d);
     const vel = Math.round(36 + y * 91);
     const notes = chord ? padChord(step) : [padNote(step)];
-    fingers.set(ev.pointerId, {notes:notes, el:d, y:y, x:x, t:0, bx:ev.clientX,
+    fingers.set(ev.pointerId, {notes:notes, el:d, y:y, x:x, t:0, bx:ev.clientX, part:part,
       cents:0, sent:0, target:0, origin:n, hover:null, hoverAt:0, locked:false, lockCents:null, chording:chord});
     notes.forEach(nn=>send("N "+nn+" "+vel+" "+part));
     paintChordLights();
@@ -3278,7 +3279,7 @@ function makePadN(n, cls, showOct){
     const y = touchY(ev, d), x = touchX(ev, d);
     const vel = Math.round(36 + y * 91);
     const notes = chord ? chromaChord(n) : [n];
-    fingers.set(ev.pointerId, {notes:notes, el:d, y:y, x:x, t:0, bx:ev.clientX,
+    fingers.set(ev.pointerId, {notes:notes, el:d, y:y, x:x, t:0, bx:ev.clientX, part:part,
       cents:0, sent:0, target:0, origin:n, hover:null, hoverAt:0, locked:false, lockCents:null, chording:chord});
     notes.forEach(nn=>send("N " + nn + " " + vel + " " + part));
     paintChordLights();
@@ -4070,7 +4071,7 @@ function microKey(c, r, cols, rows, forcedNote, forcedLabel, forcedCents){
     const zn = +d.dataset.zone || 0;
     const liveP = d.dataset.part !== undefined ? (+d.dataset.part)
                : (zn ? zn : (micro.splitOn ? ((note < (micro.split|0)) ? 1 : 0) : part));
-    fingers.set(ev.pointerId, {notes:[note], micro:[off], el:d, y:y, x:0, bx:ev.clientX,
+    fingers.set(ev.pointerId, {notes:[note], micro:[off], el:d, y:y, x:0, bx:ev.clientX, part:part,
       cents:0, sent:0, target:0, origin:note, hover:null, hoverAt:0, locked:false,
       lockCents:null, chording:false});
     send("N " + note + " " + vel + " " + liveP + " " + off);
@@ -5451,12 +5452,12 @@ document.getElementById("panic").onclick=()=>{ send("R"); releaseHeldNote(); };
   const r = document.getElementById("brange"), v = document.getElementById("brv");
   if(!r || !v) return;
   const paint = ()=>{
-    r.value = bendRange;
-    v.textContent = bendRange;
+    r.value = (bendRange / 100).toFixed(1);
+    v.textContent = (bendRange / 100).toFixed(bendRange % 100 ? 1 : 0) + " st";
     const k = document.getElementById("pB");
     if(k){ k.value = bendRange; const kv = document.getElementById("vB"); if(kv) kv.textContent = bendRange; }
   };
-  r.oninput = ()=>{ bendRange = Math.max(50, Math.min(2400, +r.value)); paint(); };
+  r.oninput = ()=>{ bendRange = Math.round(Math.max(0.5, Math.min(12, +r.value)) * 100); paint(); };
   r.onchange = ()=> saveState();
   paint();
   window.__bendPaint = paint;
