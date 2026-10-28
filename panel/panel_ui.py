@@ -1409,7 +1409,7 @@ function clipsFiring(step, when, dur){
   const c = clips.items[clips.active];
   for(let ti = 0; ti < 4; ti++){
     const tr = c.tracks[ti];
-    if(tr.hits[step]) fireNote(padNote(tr.step), tr.vel, when, dur * 0.45);
+    if(tr.hits[step]) fireNote(clipTrackNote(tr, ti), tr.vel, when, dur * 0.45);
   }
   clipPlayhead(step);
 }
@@ -3044,53 +3044,78 @@ function buildRand(){
 
 /* ----------------------------------------------------------------- clips --- */
 const clips = {
-  active:0, queued:-1,
+  active:0, queued:-1, edit:false, editIdx:0, ui:"clips", clip:null,
   items: Array.from({length:16}, ()=>({
     len:16,
     tracks: Array.from({length:4}, (_,i)=>({
-      step: i*2, vel: i===0 ? 112 : 88,
+      step: i*2, note: 60 + i*2, vel: i===0 ? 112 : 88,
       hits: new Array(16).fill(false)
     }))
   }))
 };
 let clipEls = [];
 
+/* ---- clips: a real launcher, with an editor ---------------------------- */
+/* Each clip is sixteen steps over four tracks. A track owns one note, so a clip is a
+   small four voice pattern. Tap a tile to queue it while playing, or switch EDIT on and
+   tap it to paint the hits. */
+/* clips saved before tracks carried a note fall back to the pad scale */
+function clipTrackNote(tr, ti){ return (tr && tr.note != null) ? tr.note : padNote(ti * 2); }
+
+function clipNoteName(n){
+  return NOTE[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
+}
+
 function buildClips(){
-  const v = document.getElementById("view"); v.innerHTML = "";
+  const v = document.getElementById("view");
+  if(clips.ui === "edit") return buildClipEditor(clips.editIdx || 0);
+  v.innerHTML = "";
   const wrap = document.createElement("div"); wrap.id = "seq";
-  const bar = document.createElement("div"); bar.className = "seqbar";
+  const bar = document.createElement("div"); bar.className = "seqbar"; bar.style.flexWrap = "wrap";
 
   const play = document.createElement("button"); play.id = "clipplay";
   play.textContent = tOn("clips") ? "STOP" : "PLAY";
   if(tOn("clips")) play.classList.add("on");
   play.onclick = ()=>{ if(tOn("clips")) stopAll(); else startEngine("clips"); };
   bar.appendChild(play);
-  const lab = document.createElement("span"); lab.className = "lab";
-  lab.textContent = "tap a clip to queue it at the next bar. tap RAND to fill one.";
+
+  const edit = document.createElement("button");
+  edit.textContent = clips.edit ? "EDIT ON" : "EDIT OFF";
+  if(clips.edit) edit.classList.add("on");
+  edit.onclick = ()=>{ clips.edit = !clips.edit; buildClips(); };
+  bar.appendChild(edit);
+
   const rnd = document.createElement("button"); rnd.textContent = "RAND CLIP";
   rnd.onclick = ()=>{
     const i = clips.queued >= 0 ? clips.queued : clips.active;
-    clips.items[i].tracks.forEach((tr,ti)=>{
-      for(let s=0;s<16;s++){
-        const p = ti===0 ? (s%4===0 ? 0.9 : 0.12) : (s%4===2 ? 0.4 : 0.15);
+    clips.items[i].tracks.forEach((tr, ti)=>{
+      for(let s = 0; s < 16; s++){
+        const p = ti === 0 ? (s % 4 === 0 ? 0.9 : 0.12) : (s % 4 === 2 ? 0.4 : 0.15);
         tr.hits[s] = Math.random() < p;
       }
     });
-    paintClips();
+    paintClips(); saveState();
   };
-  bar.append(lab, rnd);
+  bar.appendChild(rnd);
+
+  const lab = document.createElement("span"); lab.className = "lab";
+  lab.textContent = clips.edit ? "tap a clip to edit its steps" : "tap a clip to queue it at the next bar";
+  bar.appendChild(lab);
   wrap.appendChild(bar);
 
   const grid = document.createElement("div"); grid.id = "clipgrid";
   clipEls = [];
-  for(let i=0;i<16;i++){
+  for(let i = 0; i < 16; i++){
     const c = document.createElement("div"); c.className = "clip";
-    const num = document.createElement("div"); num.className = "clipnum"; num.textContent = (i+1);
+    const num = document.createElement("div"); num.className = "clipnum"; num.textContent = (i + 1);
     const dots = document.createElement("div"); dots.className = "clipdots";
-    c.append(num, dots);
+    const nm = document.createElement("div");
+    nm.style.cssText = "font:500 10px ui-monospace,monospace;color:#6f8794;margin-top:2px";
+    nm.textContent = clips.items[i].tracks.map((t,ti)=> clipNoteName(clipTrackNote(t, ti))).join(" ");
+    c.append(num, nm, dots);
     c.onclick = ()=>{
-      if(i === clips.active){ clips.queued = -1; }
-      else { clips.queued = i; }
+      if(clips.edit){ clips.editIdx = i; clips.ui = "edit"; buildClips(); return; }
+      if(i === clips.active){ clips.queued = -1; } else { clips.queued = i; }
       paintClips();
     };
     grid.appendChild(c); clipEls.push(c);
@@ -3099,25 +3124,93 @@ function buildClips(){
   v.appendChild(wrap);
   paintClips();
 }
-function clipDots(i){
+
+function buildClipEditor(i){
+  const v = document.getElementById("view");
+  v.innerHTML = "";
   const c = clips.items[i];
-  let n = 0;
-  c.tracks.forEach(tr=>tr.hits.forEach(h=>{ if(h) n++; }));
-  return n;
-}
-function paintClips(){
-  clipEls.forEach((el,i)=>{
-    el.classList.toggle("on", i === clips.active);
-    el.classList.toggle("queued", i === clips.queued);
-    const dots = el.querySelector(".clipdots");
-    const n = clipDots(i);
-    dots.textContent = n ? "\u25cf".repeat(Math.min(8, Math.ceil(n/4))) : "";
+  const wrap = document.createElement("div"); wrap.id = "seq";
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-height:0;";
+
+  const bar = document.createElement("div"); bar.className = "seqbar"; bar.style.flexWrap = "wrap";
+  const lab = (t)=>{ const s = document.createElement("span"); s.className = "lab"; s.textContent = t; return s; };
+  bar.appendChild(lab("CLIP " + (i + 1)));
+
+  const back = document.createElement("button"); back.textContent = "BACK";
+  back.onclick = ()=>{ clips.ui = "clips"; buildClips(); };
+  bar.appendChild(back);
+
+  const pl = document.createElement("button");
+  pl.textContent = tOn("clips") ? "STOP" : "PLAY";
+  if(tOn("clips")) pl.classList.add("on");
+  pl.onclick = ()=>{ if(tOn("clips")) stopAll(); else { clips.active = i; startEngine("clips"); } };
+  bar.appendChild(pl);
+
+  const clr = document.createElement("button"); clr.textContent = "CLEAR";
+  clr.onclick = ()=>{ c.tracks.forEach(t=> t.hits.fill(false)); buildClips(); saveState(); };
+  bar.appendChild(clr);
+
+  const copy = document.createElement("button"); copy.textContent = "COPY";
+  copy.onclick = ()=>{ clips.clip = JSON.parse(JSON.stringify(c)); };
+  bar.appendChild(copy);
+
+  const paste = document.createElement("button"); paste.textContent = "PASTE";
+  paste.style.opacity = clips.clip ? "1" : ".45";
+  paste.onclick = ()=>{
+    if(!clips.clip) return;
+    clips.items[i] = JSON.parse(JSON.stringify(clips.clip));
+    buildClips(); saveState();
+  };
+  bar.appendChild(paste);
+
+  const rnd = document.createElement("button"); rnd.textContent = "RAND";
+  rnd.onclick = ()=>{
+    c.tracks.forEach((tr, ti)=>{
+      for(let s = 0; s < 16; s++){
+        const p = ti === 0 ? (s % 4 === 0 ? 0.9 : 0.1) : (s % 4 === 2 ? 0.35 : 0.12);
+        tr.hits[s] = Math.random() < p;
+      }
+    });
+    buildClips(); saveState();
+  };
+  bar.appendChild(rnd);
+  wrap.appendChild(bar);
+
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:120px repeat(16,1fr);gap:3px;" +
+    "padding:4px 2px;flex:1 1 auto;min-height:0;grid-auto-rows:1fr;";
+  c.tracks.forEach((tr, ti)=>{
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;align-items:center;gap:6px;font:700 15px ui-monospace,monospace;color:#e8e2c8;";
+    const nl = document.createElement("span"); nl.textContent = clipNoteName(clipTrackNote(tr, ti));
+    nl.style.minWidth = "46px";
+    const dn = document.createElement("button");
+    dn.textContent = "\u2212"; dn.onclick = ()=>{ tr.note = Math.max(12, tr.note - 1); buildClips(); saveState(); };
+    const up = document.createElement("button");
+    up.textContent = "+"; up.onclick = ()=>{ tr.note = Math.min(120, tr.note + 1); buildClips(); saveState(); };
+    head.append(dn, nl, up);
+    grid.appendChild(head);
+
+    for(let s = 0; s < 16; s++){
+      const cell = document.createElement("div");
+      const hit = tr.hits[s];
+      cell.style.cssText = "border-radius:3px;cursor:pointer;border:1px solid " +
+        (hit ? "#ff8a3d" : "rgba(255,255,255,.07)") + ";" +
+        "background:" + (hit ? "#ff8a3d" : (s % 4 === 0 ? "#16222c" : "#0c1418")) + ";" +
+        "box-shadow:" + (hit ? "0 0 8px #ff8a3d88" : "none") + ";";
+      cell.onclick = ()=>{ if(tr.note == null) tr.note = clipTrackNote(tr, ti);
+                           tr.hits[s] = !tr.hits[s]; buildClips(); saveState(); };
+      grid.appendChild(cell);
+    }
   });
-}
-function clipPlayhead(s){
-  clipEls.forEach(el=>el.classList.remove("now"));
-  const el = clipEls[clips.active];
-  if(el) el.classList.add("now");
+  wrap.appendChild(grid);
+
+  const hint = document.createElement("div");
+  hint.style.cssText = "padding:6px 4px;color:#7f96a1;font:12px ui-monospace,monospace;";
+  hint.textContent = "tap cells to place hits, + and - retune a row a semitone at a time, " +
+    "COPY then PASTE duplicates the whole clip into this slot. Every clip plays for one bar.";
+  wrap.appendChild(hint);
+  v.appendChild(wrap);
 }
 
 /* ---------------------------------------------------------------- chroma -- */
@@ -5749,6 +5842,7 @@ function snapshot(){
   const num = (id)=>{ const el = document.getElementById(id); return el ? +el.value : 0; };
   return {
     v:1, view, keySel, typeSel, oct, chord, sust, bpm, divSel, part, patch: patchIdx, bend: bendMode, bendRange: bendRange, vol: +volEl.value, bank: document.getElementById("banksel").value, eng: engWT, wtv: WT2, wtp: wtUser, wtf: wtFile, wtpart: wtPart, slot: slotName.slice(), midi: midi.name, partSplit: midi.partSplit, chordN: chordN, chordSpace: chordSpace, fxHidden: fxHidden, kitPads: kitPads, pianoOn: pianoOn,
+    clipsState: { active: clips.active, items: clips.items },
     seq: { pats: sq.pats, song: sq.song, cur: sq.cur, songOn: sq.songOn },
     micro: {edo: micro.edo, layout: micro.layout, root: micro.root, size: micro.size, splitOn: micro.splitOn, split: micro.split, dragOn: micro.dragOn, splitMode: micro.splitMode, bassOfs: micro.bassOfs, bassSpan: micro.bassSpan},
     gmode: transport.global,
@@ -5782,6 +5876,10 @@ function applyState(s){
   if(s.midi) setTimeout(()=>{ midiLoadFile(s.midi).catch(()=>{}); }, 900);
   /* the patterns and the chain come back with everything else */
   if(typeof s.pianoOn === "boolean") setTimeout(()=>{ pianoOn = s.pianoOn; send("P 37 " + (pianoOn ? 1 : 0)); }, 900);
+  if(s.clipsState && Array.isArray(s.clipsState.items) && s.clipsState.items.length === 16){
+    clips.items = s.clipsState.items;
+    clips.active = s.clipsState.active | 0;
+  }
   if(Array.isArray(s.kitPads) && s.kitPads.length === 8){
     for(let i = 0; i < 8; i++) kitPads[i] = Object.assign({ rate:1000, level:1000, trim:1000 }, s.kitPads[i] || {});
   }
