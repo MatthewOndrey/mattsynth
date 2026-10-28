@@ -1415,6 +1415,7 @@ function clipsFiring(step, when, dur){
 }
 
 function startEngine(mode){
+  if(mode === "clips") send("P 36 1");   /* clips are drum patterns on the sample kit */
   const list = transport.global ? ALL_MODES.map(engSpec) : [engSpec(mode)];
   transport.start(list.filter(Boolean));
   paintPlay();
@@ -3048,7 +3049,7 @@ const clips = {
   items: Array.from({length:16}, ()=>({
     len:16,
     tracks: Array.from({length:4}, (_,i)=>({
-      step: i*2, note: 60 + i*2, vel: i===0 ? 112 : 88,
+      step: i*2, note: 36 + i, vel: i===0 ? 112 : 88,
       hits: new Array(16).fill(false)
     }))
   }))
@@ -3060,9 +3061,11 @@ let clipEls = [];
    small four voice pattern. Tap a tile to queue it while playing, or switch EDIT on and
    tap it to paint the hits. */
 /* clips saved before tracks carried a note fall back to the pad scale */
-function clipTrackNote(tr, ti){ return (tr && tr.note != null) ? tr.note : padNote(ti * 2); }
+function clipTrackNote(tr, ti){ return (tr && tr.note != null) ? tr.note : (36 + ti); }
 
+const KIT_NAMES = ["KICK","SNARE","HAT","CLAP","TOM","RIM","BASS","CHORD"];
 function clipNoteName(n){
+  if(n >= 36 && n <= 43) return KIT_NAMES[n - 36];
   return NOTE[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
 }
 
@@ -3183,11 +3186,12 @@ function buildClipEditor(i){
     const head = document.createElement("div");
     head.style.cssText = "display:flex;align-items:center;gap:6px;font:700 15px ui-monospace,monospace;color:#e8e2c8;";
     const nl = document.createElement("span"); nl.textContent = clipNoteName(clipTrackNote(tr, ti));
-    nl.style.minWidth = "46px";
+    nl.style.minWidth = "70px";
     const dn = document.createElement("button");
     dn.textContent = "\u2212"; dn.onclick = ()=>{ tr.note = Math.max(12, tr.note - 1); buildClips(); saveState(); };
     const up = document.createElement("button");
-    up.textContent = "+"; up.onclick = ()=>{ tr.note = Math.min(120, tr.note + 1); buildClips(); saveState(); };
+    up.textContent = "▶"; up.onclick = ()=>{
+      const k = (clipTrackNote(tr, ti) - 36 + 1) % 8; tr.note = 36 + k; buildClips(); saveState(); };
     head.append(dn, nl, up);
     grid.appendChild(head);
 
