@@ -41,6 +41,7 @@
 #include "PianoEngine.h"
 
 static bool kit_on = false;
+static bool trace_bend = false;   /* TEMPORARY */
 static bool piano_on = false;
 KitEngine kit;
 PianoEngine piano;
@@ -70,6 +71,8 @@ struct SynthHost
         if(wt_mode){ wts.NoteOn(n, v, p); if(cents) wts.Bend(p, n, (float)cents); }
         else fm.NoteOn(n, v, p, cents, tag);
     }
+    bool Debug(int note, int *a, int *b, int *c) { return fm.Debug(note, a, b, c); }
+
     void NoteOff(uint8_t n, int c = -1, uint8_t tag = 0) { wt_mode ? wts.NoteOff(n, c) : fm.NoteOff(n, c, tag); }
     void KillNote(uint8_t n)     { wt_mode ? wts.KillNote(n) : fm.KillNote(n); }
     void AllOff()                { wt_mode ? wts.AllOff() : fm.AllOff(); }
@@ -443,7 +446,12 @@ static void apply_param(int idx, int val)
             bank[p_patch].algorithm     = (uint8_t)p_alg;
             synth.SetPatch(lp(), edit_part);
             break;
-        case 4: select_patch(val, true); break;
+        case 4:
+            select_patch(val, true);
+            /* the header patch control is global: load it on both parts, otherwise
+               scrolling while you play the other part changes something you cannot hear */
+            synth.SetPatch(bank[clampi(val, 0, bank_size - 1)], 1 - edit_part);
+            break;
         case 5:
         {
             synth.SetMaxVoices(val);
@@ -771,7 +779,30 @@ static void handle(const char* body)
                 if(sscanf(body, "T %d %d %d", &a, &b, &cents) == 3)
                 {
                     synth.Bend(clampi(a, 0, 1), b, (float)cents);
-                    if(piano_on) piano.Bend(b, cents);   /* the sample engine bends too */
+                    if(piano_on)
+                    {
+                        piano.Bend(b, cents);   /* the sample engine bends too */
+                        if(trace_bend)
+                        {
+                            int pn = 0, pr = 0, pb = 0;
+                            if(piano.Debug(b, &pn, &pr, &pb))
+                            {
+                                char m[40];
+                                snprintf(m, sizeof(m), "D %d %d %d", pn, pr, pb);
+                                send_body(m);
+                            }
+                        }
+                    }
+                    if(trace_bend)
+                    {
+                        int dn = 0, dhz = 0, db = 0;
+                        if(synth.Debug(b, &dn, &dhz, &db))
+                        {
+                            char m[40];
+                            snprintf(m, sizeof(m), "D %d %d %d", dn, dhz, db);
+                            send_body(m);
+                        }
+                    }
                 }
             }
             break;
