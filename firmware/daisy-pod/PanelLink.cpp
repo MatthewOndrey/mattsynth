@@ -769,7 +769,10 @@ static void handle(const char* body)
                    linked in, and it then returns 2 and the bend is silently skipped */
                 int cents = 0;
                 if(sscanf(body, "T %d %d %d", &a, &b, &cents) == 3)
+                {
                     synth.Bend(clampi(a, 0, 1), b, (float)cents);
+                    if(piano_on) piano.Bend(b, cents);   /* the sample engine bends too */
+                }
             }
             break;
         case 'Y':

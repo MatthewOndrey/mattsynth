@@ -52,9 +52,12 @@ class PianoEngine
         }
         V &v = v_[pick];
         v.on   = true;
+        v.bendMul = bend_;
         v.slot = best;
+        v.note = (uint8_t)note;
         v.pos  = 0.0f;
-        v.rate = powf(2.0f, (note - kPiano[best].note) / 12.0f);
+        v.base = powf(2.0f, (note - kPiano[best].note) / 12.0f);
+        v.rate = v.base * v.bendMul;
         v.amp  = (vel / 127.0f) * 0.85f;
     }
 
@@ -66,6 +69,21 @@ class PianoEngine
     }
 
     void KillAll() { for(int i = 0; i < kVoices; i++) v_[i].on = false; }
+
+    /* T <part> <note> <cents>: note -1 bends the whole instrument */
+    void Bend(int note, int cents)
+    {
+        const float mul = powf(2.0f, (float)cents / 1200.0f);
+        for(int i = 0; i < kVoices; i++)
+        {
+            V &v = v_[i];
+            if(!v.on) continue;
+            if(note >= 0 && (int)v.note != note) continue;
+            v.bendMul = mul;
+            v.rate    = v.base * mul;
+        }
+        bend_ = mul;
+    }
 
     void Render(float *l, float *r, size_t n)
     {
@@ -90,7 +108,8 @@ class PianoEngine
     }
 
   private:
-    struct V { bool on; int slot; float pos, rate, amp; };
+    struct V { bool on; int slot; uint8_t note; float pos, base, rate, amp, bendMul = 1.0f; };
     uint32_t off_[5], len_[5];
+    float    bend_ = 1.0f;
     V v_[kVoices];
 };
