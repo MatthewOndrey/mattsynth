@@ -711,7 +711,7 @@ static void handle(const char* body)
                     /* notes 36..43 are the kit while it is armed */
                     if(piano_on)
                     {
-                        piano.Trigger(a, b);
+                        piano.Trigger(a, b, cents);
                         break;
                     }
                     if(kit_on && a >= 36 && a <= 43)

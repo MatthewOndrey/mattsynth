@@ -34,7 +34,7 @@ class PianoEngine
         for(int i = 0; i < kVoices; i++) v_[i].on = false;
     }
 
-    void Trigger(int note, int vel)
+    void Trigger(int note, int vel, int cents = 0)
     {
         if(note < 12 || note > 120) return;
         int best = 0, dist = 999;
@@ -56,7 +56,8 @@ class PianoEngine
         v.slot = best;
         v.note = (uint8_t)note;
         v.pos  = 0.0f;
-        v.base = powf(2.0f, (note - kPiano[best].note) / 12.0f);
+        /* microtonal offset from the N message, so the sampled piano follows the board */
+        v.base = powf(2.0f, (note - kPiano[best].note) / 12.0f) * powf(2.0f, (float)cents / 1200.0f);
         v.rate = v.base * v.bendMul;
         v.amp  = (vel / 127.0f) * 0.85f;
     }
@@ -69,6 +70,22 @@ class PianoEngine
     }
 
     void KillAll() { for(int i = 0; i < kVoices; i++) v_[i].on = false; }
+
+    /* TEMPORARY: what the sample voice is actually running at */
+    bool Debug(int note, int *outNote, int *outRate1000, int *outBend1000)
+    {
+        for(int i = 0; i < kVoices; i++)
+        {
+            V &v = v_[i];
+            if(!v.on) continue;
+            if(note >= 0 && (int)v.note != note) continue;
+            *outNote = v.note;
+            *outRate1000 = (int)(v.rate * 1000.0f);
+            *outBend1000 = (int)(v.bendMul * 1000.0f);
+            return true;
+        }
+        return false;
+    }
 
     /* T <part> <note> <cents>: note -1 bends the whole instrument */
     void Bend(int note, int cents)

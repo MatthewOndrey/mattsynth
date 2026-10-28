@@ -5758,6 +5758,11 @@ function renderWtPatchList(){
 /* picking a wavetable patch: a wave set loads its samples, a saved preset or INIT
    just writes the parameters. It never changes the engine on its own. */
 async function wtPick(i){
+  if(pianoOn || !engWT){
+    pianoOn = false; engWT = true;
+    send("P 37 0"); send("P 28 1");
+    paintEng();
+  }
   const nFiles = wtListFiles.length;
   if(i > 0 && i <= nFiles){
     try{ await wtLoadFile(wtListFiles[i-1]); }catch(e){}
@@ -5774,6 +5779,8 @@ async function wtPick(i){
 function renderPatchList(){
   if(pianoOn){
     /* one instrument, so the list says so instead of showing FM patches */
+    if(patchSel.value !== "-1"){ patchSel.innerHTML = ""; }
+
     const have = [...patchSel.options].map(o=>o.textContent);
     if(have.length !== 1 || have[0] !== "Salamander grand"){
       patchSel.innerHTML = "";
