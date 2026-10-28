@@ -4555,8 +4555,8 @@ function buildSong(){
   sw.onchange = ()=> saveState();
   bar.appendChild(sw); bar.appendChild(swl);
 
-  btn("CLR A", false, ()=>{ pat.ev = pat.ev.filter(e=> (e.part || 0) !== 0); buildSong(); saveState(); });
-  btn("CLR B", false, ()=>{ pat.ev = pat.ev.filter(e=> (e.part || 0) !== 1); buildSong(); saveState(); });
+  btn("CLEAR A", false, ()=>{ pat.ev = pat.ev.filter(e=> (e.part || 0) !== 0); buildSong(); saveState(); });
+  btn("CLEAR B", false, ()=>{ pat.ev = pat.ev.filter(e=> (e.part || 0) !== 1); buildSong(); saveState(); });
   btn("COPY", false, ()=>{ sq.clip = pat.ev.filter(e=> (e.part || 0) === sq.sel.part).map(e=> Object.assign({}, e)); });
   btn("PASTE", false, ()=>{
     if(!sq.clip || !sq.clip.length) return;
@@ -4569,9 +4569,9 @@ function buildSong(){
   pl.textContent = sq.playing ? "\u25a0" : "\u25b6"; if(sq.playing) pl.classList.add("on");
   pl.onclick = ()=> sq.playing ? sqStop() : sqPlay(); bar.appendChild(pl);
 
-  btn(sq.songOn ? "SONG" : "PATT", sq.songOn, ()=>{ sq.songOn = !sq.songOn; buildSong(); saveState(); });
-  btn("+CH", false, ()=>{ sq.song.push({ p: sq.cur, r: 2 }); buildSong(); saveState(); });
-  btn("-CH", false, ()=>{ sq.song.pop(); buildSong(); saveState(); });
+  btn(sq.songOn ? "PLAYING SONG" : "LOOPING PATTERN", sq.songOn, ()=>{ sq.songOn = !sq.songOn; buildSong(); saveState(); });
+  btn("ADD TO CHAIN", false, ()=>{ sq.song.push({ p: sq.cur, r: 2 }); buildSong(); saveState(); });
+  btn("REMOVE LAST", false, ()=>{ sq.song.pop(); buildSong(); saveState(); });
   const pos = document.createElement("span"); pos.id = "sqpos"; pos.className = "lab";
   pos.style.marginLeft = "auto";
   pos.textContent = "P" + (sq.cur + 1) + " \u00b7 " + (sq.step + 1) + "/" + pat.len;
@@ -4610,7 +4610,8 @@ function buildSong(){
       c.style.cssText = "height:44px;border-radius:5px;display:flex;flex-direction:column;" +
         "align-items:center;justify-content:center;font:600 11px system-ui;cursor:pointer;" +
         "user-select:none;border:1px solid " + (sel ? "#7fd1ff" : "#1b2a30") + ";" +
-        "background:" + (hit ? (part ? "#1d4d3a" : "#26395c") : "#101920") + ";" +
+        "background:" + (hit ? (part ? "#1d4d3a" : "#26395c")
+                              : (st % 4 === 0 ? "#16222c" : "#101920")) + ";" +
         "color:" + (hit ? "#e8f6ff" : "#33454f") + ";";
       if(hit){
         c.textContent = NOTE[hit.n % 12] + (Math.floor(hit.n / 12) - 1);
@@ -4664,6 +4665,23 @@ function buildSong(){
     ed.appendChild(add);
   }
   wrap.appendChild(ed);
+
+  const legend = document.createElement("div");
+  legend.style.cssText = "display:flex;gap:22px;padding:2px 6px;color:#6f8794;font:12px system-ui;";
+  legend.innerHTML =
+    "<span><b style='color:#26395c'>■</b> row A: synth part one</span>" +
+    "<span><b style='color:#1d4d3a'>■</b> row B: synth part two</span>" +
+    "<span>brighter columns are beats 1 2 3 4</span>";
+  wrap.appendChild(legend);
+
+  const hint = document.createElement("div");
+  hint.style.cssText = "padding:2px 6px 8px;color:#5a6f7a;font:12px system-ui;line-height:1.45;";
+  hint.textContent =
+    "Pick a pattern at the top, tap a cell to select that step, then PLACE drops the header's note there " +
+    "or the editor changes the note already there. LOOPING PATTERN repeats this one pattern; " +
+    "ADD TO CHAIN stacks it for the song, and the button on the left switches between looping and " +
+    "playing the chain from the start. Everything saves with the panel.";
+  wrap.appendChild(hint);
   v.appendChild(wrap);
   paintSongPlayhead();
 }

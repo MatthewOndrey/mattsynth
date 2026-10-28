@@ -61,6 +61,7 @@ class KitEngine
         v_[pick].slot = s;
         v_[pick].pos  = 0.0f;
         v_[pick].amp  = (vel / 127.0f) * 0.9f;
+        v_[pick].rate = rate_[s];   /* was left uninitialised: garbage rate meant a click */
     }
 
     int Active() const
@@ -90,7 +91,11 @@ class KitEngine
                 if(p + 1 >= len) { v.on = false; break; }
                 const float fr = v.pos - (float)p;
                 const float a = src[p] * (1.0f - fr) + src[p + 1] * fr;
-                const float s = (a / 32768.0f) * v.amp;
+                /* a two millisecond fade keeps the one shots from clicking on */
+                float g = 1.0f;
+                if(v.pos < 96.0f)            g = v.pos / 96.0f;
+                else if(len - v.pos < 96.0f) g = (len - v.pos) / 96.0f;
+                const float s = (a / 32768.0f) * v.amp * g;
                 l[i] += s;
                 r[i] += s;
                 v.pos += v.rate;
