@@ -614,7 +614,16 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
 #mrow.hex { position:relative; flex:1; min-height:0; }
 #mrow.hex .mkey { position:absolute; border:none; border-radius:0;
                   clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
-  .mkey .kl { width:100%; height:100%; display:flex; flex-direction:column;
+  .arpz { position:absolute; left:0; bottom:0; width:22%; height:22%;
+        border-top-right-radius:10px; border-bottom-left-radius:inherit;
+        background:linear-gradient(135deg, rgba(120,220,255,.55), rgba(150,90,255,.55));
+        box-shadow:inset 0 0 8px rgba(255,255,255,.35);
+        opacity:.55; transition:opacity .15s ease, box-shadow .15s ease; }
+.arpz.on { opacity:1; animation:arpPulse .7s ease-in-out infinite;
+           box-shadow:inset 0 0 10px rgba(255,255,255,.6), 0 0 14px rgba(120,220,255,.8); }
+@keyframes arpPulse { 0%,100% { filter:brightness(1); } 50% { filter:brightness(1.7); } }
+.pad.arpFire { box-shadow:0 0 0 2px #7fd1ff, 0 0 22px rgba(127,209,255,.85) !important; }
+.mkey .kl { width:100%; height:100%; display:flex; flex-direction:column;
               align-items:center; justify-content:center; transform:rotate(7deg); }
 /* --- press feedback: a held key glows, and every hit throws a spark burst ---- */
 @keyframes heldPulse {
@@ -1210,6 +1219,73 @@ function buildKalimba(){
   v.appendChild(top); v.appendChild(bot);
 }
 
+/* ---- grid arpeggiator -------------------------------------------------- */
+/* The bottom left corner of every grid pad is a latch. Hold corners on two or more
+   pads and the notes cycle, up then down, one sixteenth of the global tempo per step.
+   The corners are pointer targets in their own right, so the pad itself still plays. */
+const gArp = { held:new Map(), timer:null, step:0, playing:false, flash:null };
+
+function gArpMs(){ return 60000 / Math.max(30, bpm | 0) / 4; }
+
+function gArpNotes(){ return Array.from(gArp.held.keys()).sort((a, b)=> a - b); }
+
+function gArpOrder(){
+  const n = gArpNotes();
+  if(n.length < 2) return n;
+  const up = n.slice();
+  const down = n.slice(1, -1).reverse();
+  return up.concat(down);          /* 1 2 3 2 1 2 3 ... */
+}
+
+function gArpStop(){
+  if(gArp.timer) clearInterval(gArp.timer);
+  gArp.timer = null; gArp.playing = false; gArp.step = 0;
+  gArp.held.forEach((el)=>{ if(el) el.classList.remove("on"); });
+  document.querySelectorAll(".pad.arpFire").forEach(e=> e.classList.remove("arpFire"));
+}
+
+function gArpTick(){
+  const order = gArpOrder();
+  if(!order.length){ gArpStop(); return; }
+  const n = order[gArp.step % order.length];
+  send("N " + n + " 104 " + part);
+  setTimeout(()=> send("O " + n), Math.max(40, gArpMs() * 0.8));
+  /* light the pad that owns this note */
+  document.querySelectorAll(".pad.arpFire").forEach(e=> e.classList.remove("arpFire"));
+  const hit = Array.from(document.querySelectorAll("#grid .pad")).find(e=> +e.dataset.note === n);
+  if(hit){ hit.classList.add("arpFire"); }
+  gArp.step++;
+}
+
+function gArpSync(){
+  const n = gArpNotes();
+  if(n.length >= 2 && !gArp.timer){
+    gArp.step = 0;
+    gArp.timer = setInterval(gArpTick, gArpMs());
+    gArp.playing = true;
+    gArpTick();
+  } else if(n.length < 2 && gArp.timer){
+    gArpStop();
+  }
+  gArp.held.forEach((el)=> { if(el) el.classList.add("on"); });
+}
+
+function gArpHold(note, zone, ev){
+  gArp.held.set(note, zone);
+  zone.classList.add("on");
+  gArpSync();
+  try { zone.setPointerCapture(ev.pointerId); } catch(e){}
+  const done = ()=>{
+    zone.classList.remove("on");
+    if(gArp.held.get(note) === zone){
+      gArp.held.delete(note);
+      gArpSync();
+    }
+  };
+  zone.addEventListener("pointerup", done, { once:true });
+  zone.addEventListener("pointercancel", done, { once:true });
+}
+
 function buildGrid(){
   const v=document.getElementById("view"); v.innerHTML="";
   const g=document.createElement("div"); g.id="grid";
@@ -1218,7 +1294,18 @@ function buildGrid(){
       /* 7 scale degrees per row, the 8th column is the next octave root.
          row 0 is drawn at the top, so count octaves downwards from the top */
       const step = (3-r)*7 + c;
-      g.appendChild(makePad(step, c===7 ? "pad dark" : "pad", true));
+      const pad = makePad(step, c===7 ? "pad dark" : "pad", true);
+      pad.style.position = "relative";   /* the corner zone anchors to its pad */
+      pad.style.overflow = "hidden";
+      const az = document.createElement("div");
+      az.className = "arpz";
+      az.title = "hold for arpeggio";
+      az.addEventListener("pointerdown", ev=>{
+        ev.preventDefault(); ev.stopPropagation();
+        gArpHold(+pad.dataset.note, az, ev);
+      });
+      pad.appendChild(az);
+      g.appendChild(pad);
     }
   }
   v.appendChild(g);
@@ -4844,6 +4931,7 @@ function buildKit(){
 
 
 function renderView(){
+  if(typeof gArpStop === "function") gArpStop();   /* leaving the grid drops the latch */
   if(fingers.size) releaseAll();
   if(typeof heldNote !== "undefined" && heldNote >= 0) releaseHeldNote();
   /* a file keeps playing across tabs on purpose, so the algorithm and operator
