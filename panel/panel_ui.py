@@ -749,6 +749,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
       <button id="chordb">CHORD off</button>
       <button id="sustb">SUSTain off</button>
       <button id="bendb">BEND off</button>
+      <span class="lab">RNG</span>
+      <input id="brange" type="range" min="50" max="2400" step="25" value="1200"
+             style="width:62px" title="cents of bend at full deflection">
+      <b id="brv" style="font:600 11px ui-monospace,monospace;color:#9fd">1200</b>
       <button id="octup">+ OCT</button>
     </div>
     <div class="hspacer"></div>
@@ -5442,6 +5446,22 @@ document.getElementById("chordb").onclick=()=>{ chord=!chord; label(); };
 document.getElementById("sustb").onclick=()=>{ sust=!sust; label(); };
 document.getElementById("panic").onclick=()=>{ send("R"); releaseHeldNote(); };
 
+/* bend range, in cents at full deflection: the strip scales to whatever this says */
+(function(){
+  const r = document.getElementById("brange"), v = document.getElementById("brv");
+  if(!r || !v) return;
+  const paint = ()=>{
+    r.value = bendRange;
+    v.textContent = bendRange;
+    const k = document.getElementById("pB");
+    if(k){ k.value = bendRange; const kv = document.getElementById("vB"); if(kv) kv.textContent = bendRange; }
+  };
+  r.oninput = ()=>{ bendRange = Math.max(50, Math.min(2400, +r.value)); paint(); };
+  r.onchange = ()=> saveState();
+  paint();
+  window.__bendPaint = paint;
+})();
+
 /* header transport: one button for every lane plus the midi player */
 function paintGplay(){
   const k = document.getElementById("p12");
@@ -5980,7 +6000,10 @@ function applyState(s){
     setTimeout(apply, 500);
     setTimeout(apply, 1500);
   }
-  if(typeof s.bendRange === "number") bendRange = Math.max(50, Math.min(2400, s.bendRange));
+  if(typeof s.bendRange === "number"){
+    bendRange = Math.max(50, Math.min(2400, s.bendRange));
+    if(window.__bendPaint) setTimeout(()=> window.__bendPaint(), 300);
+  }
   if(typeof s.fxHidden === "boolean"){ fxHidden = s.fxHidden; if(typeof paintFx === "function") paintFx(); }
   if(typeof s.chordN === "number") chordN = Math.max(2, Math.min(6, s.chordN));
   if(typeof s.chordSpace === "number") chordSpace = Math.max(1, Math.min(4, s.chordSpace));
