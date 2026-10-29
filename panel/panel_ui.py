@@ -5755,16 +5755,18 @@ async function wtPick(i){
   saveState();
 }
 
+let pianoSetName = "Streamed set";
 function renderPatchList(){
   if(pianoOn){
     /* one instrument, so the list says so instead of showing FM patches */
     if(patchSel.value !== "-1"){ patchSel.innerHTML = ""; }
 
     const have = [...patchSel.options].map(o=>o.textContent);
-    if(have.length !== 1 || have[0] !== "Salamander grand"){
+    const label = (typeof pianoSetName !== "undefined" && pianoSetName) ? pianoSetName : "Streamed set";
+    if(have.length !== 1 || have[0] !== label){
       patchSel.innerHTML = "";
       const o = document.createElement("option");
-      o.value = "-1"; o.textContent = "Salamander grand";
+      o.value = "-1"; o.textContent = label;
       patchSel.appendChild(o);
     }
     return;
