@@ -1066,7 +1066,6 @@ setInterval(()=>{
     if(c === f.sent) return;
     f.sent = c;
     bendTrail(f.lx, f.ly, c, bendRange);
-    bendReadout(f.lx, f.ly, c);
     const bp = (f.part !== undefined) ? f.part : part;
     f.notes.forEach(nn=>send("T " + bp + " " + nn + " " + c));
   });
@@ -5246,6 +5245,7 @@ function buildKit(){
 
 
 function renderView(){
+  const bad = document.getElementById("bendread"); if(bad) bad.remove();
   if(typeof gArpStop === "function") gArpStop();   /* leaving the grid drops the latch */
   if(fingers.size) releaseAll();
   if(typeof heldNote !== "undefined" && heldNote >= 0) releaseHeldNote();
