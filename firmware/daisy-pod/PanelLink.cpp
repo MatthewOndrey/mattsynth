@@ -416,6 +416,76 @@ static void select_patch(int idx, bool announce)
 
 // ----------------------------------------------------------------- receiving
 /* USB CDC receive: ISR context, so only move bytes into the ring. */
+// ---------------------------------------------------------------- sample arena
+/* The piano buffer is the temporary home for pushed samples: it is the largest block of
+   SDRAM we already own, and this proves the transport before any engine is rewired.
+   C <frames> opens it, X <4 hex per sample> appends, G reports what landed. */
+static int16_t* const kArena  = g_pno_buf;
+static const int      kArenaMax = 600000;
+static int arena_w = 0, arena_limit = 0, arena_root = 60;
+static int zone_n = 0;
+static int zone_off[5] = {0}, zone_len[5] = {0}, zone_root[5] = {0};
+
+static void arena_open(const char* body)
+{
+    int frames = 0, root = 60;
+    if(sscanf(body, "C %d %d", &frames, &root) != 1) return;
+    if(frames <= 0)                      /* C 0 resets the whole set */
+    {
+        arena_w = 0; zone_n = 0;
+        piano.ResetZones();
+        char r[24]; snprintf(r, sizeof(r), "H 0"); send_body(r);
+        return;
+    }
+    arena_root = clampi(root, 0, 127);
+    if(zone_n < 5)
+    {
+        zone_off[zone_n]  = arena_w;
+        zone_len[zone_n]  = frames;
+        zone_root[zone_n] = arena_root;
+        arena_w += frames;
+        if(arena_w > kArenaMax) arena_w = kArenaMax;
+        zone_n++;
+    }
+    arena_limit = arena_w;
+    char m[32]; snprintf(m, sizeof(m), "H %d", arena_w); send_body(m);
+}
+static void arena_data(const char* body)
+{
+    /* skip "X ", then four hex characters per sample, stopping at the checksum:
+       the frame carries "*XX\n" after the data and those characters were being read as
+       extra samples, which shifted every sample after the first message. */
+    while(*body && *body != 32) ++body;
+    if(*body) ++body;
+    while(arena_w < arena_limit && body[0] && body[1] && body[2] && body[3])
+    {
+        if(body[0] == 42) break;
+        const int v = (hexval(body[0]) << 12) | (hexval(body[1]) << 8) | (hexval(body[2]) << 4) | hexval(body[3]);
+        kArena[arena_w++] = (int16_t)v;
+        body += 4;
+    }
+}
+
+static void arena_report(void)
+{
+    char m[32]; snprintf(m, sizeof(m), "J %d", arena_w); send_body(m);
+    for(int z = 0; z < zone_n; ++z)
+        piano.SetZone(z, zone_off[z], zone_len[z], zone_root[z]);
+}
+
+/* J <offset> <count>: echo samples back, so the transport can be proven rather than assumed */
+static void arena_peek(const char* body)
+{
+    int off = 0, n = 0;
+    if(sscanf(body, "J %d %d", &off, &n) != 2 || n < 1) return;
+    if(n > 24) n = 24;
+    if(off < 0 || off + n > arena_limit) return;
+    char m[160]; int k = snprintf(m, sizeof(m), "J %d", off);
+    for(int i = 0; i < n && k < (int)sizeof(m) - 6; ++i)
+        k += snprintf(m + k, sizeof(m) - k, " %04X", (uint16_t)kArena[off + i]);
+    send_body(m);
+}
+
 static void UsbRx(uint8_t* buff, uint32_t* len)
 {
     for(uint32_t i = 0; i < *len; ++i)
@@ -869,6 +939,10 @@ static void handle(const char* body)
 #endif
             break;
         case 'A': send_body("A"); break;
+        case 'C': arena_open(body); break;
+        case 'X': arena_data(body); break;
+        case 'G': arena_report(); break;
+        case 'J': arena_peek(body); break;
         case 'L': send_patch_list(); break;
         case 'B': handle_bank_voice(body); break;
         default: break; /* unknown verbs are ignored on purpose */

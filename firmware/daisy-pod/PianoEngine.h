@@ -38,9 +38,11 @@ class PianoEngine
     {
         if(note < 12 || note > 120) return;
         int best = 0, dist = 999;
-        for(int i = 0; i < 5; i++)
+        const int nSlots = zoneCount_ > 0 ? zoneCount_ : 5;
+        for(int i = 0; i < nSlots; i++)
         {
-            const int d = abs(note - kPiano[i].note);
+            const int root = (zoneCount_ > 0) ? zoneRoot_[i] : (arenaRoot >= 0 ? arenaRoot : kPiano[i].note);
+            const int d = abs(note - root);
             if(d < dist) { dist = d; best = i; }
         }
         int pick = -1;
@@ -59,7 +61,9 @@ class PianoEngine
         v.note = (uint8_t)note;
         v.pos  = 0.0f;
         /* microtonal offset from the N message, so the sampled piano follows the board */
-        v.base = powf(2.0f, (note - kPiano[best].note) / 12.0f) * powf(2.0f, (float)cents / 1200.0f);
+        const int bestRoot = (zoneCount_ > 0) ? zoneRoot_[best]
+                                              : (arenaRoot >= 0 ? arenaRoot : kPiano[best].note);
+        v.base = powf(2.0f, (note - bestRoot) / 12.0f) * powf(2.0f, (float)cents / 1200.0f);
         v.rate = v.base * v.bendMul;
         v.amp  = (vel / 127.0f) * 0.85f;
     }
@@ -128,6 +132,35 @@ class PianoEngine
 
   private:
     struct V { bool on; int slot; uint8_t note; float pos, base, rate, amp, bendMul = 1.0f; };
+
+public:
+    /* When a sample has been pushed over the link it lives at the start of the buffer and
+       covers the whole keyboard as a single zone, so the root note comes from the loader
+       rather than from the baked in table. */
+    int arenaRoot = -1;
+    int zoneRoot_[5] = {0, 0, 0, 0, 0};
+    int zoneCount_ = 0;
+    void UseArena(int frames, int root)
+    {
+        if(frames <= 0 || frames > 600000){ arenaRoot = -1; return; }
+        off_[0] = 0;
+        len_[0] = frames;
+        arenaRoot = root;
+    }
+    bool arenaActive() const { return arenaRoot >= 0; }
+
+    /* A zone is one pushed sample: where it sits in the arena, how long it is and what note
+       it was recorded at. Up to five, which is what the root slots already allowed. */
+    void ResetZones() { zoneCount_ = 0; arenaRoot = -1; }
+    void SetZone(int z, int off, int len, int root)
+    {
+        if(z < 0 || z > 4) return;
+        off_[z] = off;
+        len_[z] = len;
+        zoneRoot_[z] = root;
+        if(z + 1 > zoneCount_) zoneCount_ = z + 1;
+        arenaRoot = -1;
+    }
     uint32_t off_[5], len_[5];
     float    bend_ = 1.0f;
     V v_[kVoices];
