@@ -5773,8 +5773,6 @@ setTimeout(()=>fetch("/setname").then(r=>r.json()).then(n=>{
 function renderPatchList(){
   if(pianoOn){
     /* one instrument, so the list says so instead of showing FM patches */
-    if(patchSel.value !== "-1"){ patchSel.innerHTML = ""; }
-
     const have = [...patchSel.options].map(o=>o.textContent);
     /* the set list is asked for again every few seconds, so a set built on the Pi shows up
        without reloading the page */
@@ -5799,9 +5797,11 @@ function renderPatchList(){
       return;
     }
     const cur = window.__setSel || pianoSetName;
-    const want = sets.map(st => labelOf(st) + (labelOf(st) === cur || st.id === cur ? "  *" : ""));
-    const have2 = [...patchSel.options].map(o=>o.textContent);
-    if(have2.join("|") !== want.join("|")){
+    /* rebuild only when the set list itself changes, never because the labels differ:
+       comparing text made every redraw rebuild, which emptied the field as it went */
+    const ids = sets.map(st => st.id).join(",");
+    if(window.__setIds !== ids){
+      window.__setIds = ids;
       patchSel.innerHTML = "";
       sets.forEach(st=>{
         const o = document.createElement("option");
@@ -5864,6 +5864,10 @@ patchSel.onchange = ()=>{
     fetch("/setload?n=" + encodeURIComponent(name)).then(r=>r.json()).then(j=>{
       if(j.ok){ pianoSetName = name; }
       renderPatchList();
+      /* the redraw must leave the field showing the set that was just chosen */
+      const v2 = "set:" + name;
+      if([...patchSel.options].some(o => o.value === v2)) patchSel.value = v2;
+      else if(patchSel.options.length) patchSel.selectedIndex = 0;
     }).catch(()=>{});
     return;
   }
