@@ -429,7 +429,9 @@ static int zone_off[5] = {0}, zone_len[5] = {0}, zone_root[5] = {0};
 static void arena_open(const char* body)
 {
     int frames = 0, root = 60;
-    if(sscanf(body, "C %d %d", &frames, &root) != 1) return;
+    /* sscanf returns how many fields it matched: "C 8 60" matches two, so anything less
+       than one is a malformed line and anything else is fine */
+    if(sscanf(body, "C %d %d", &frames, &root) < 1) return;
     if(frames <= 0)                      /* C 0 resets the whole set */
     {
         arena_w = 0; zone_n = 0;
@@ -440,14 +442,14 @@ static void arena_open(const char* body)
     arena_root = clampi(root, 0, 127);
     if(zone_n < 5)
     {
-        zone_off[zone_n]  = arena_w;
+        const int start = arena_w;
+        zone_off[zone_n]  = start;
         zone_len[zone_n]  = frames;
         zone_root[zone_n] = arena_root;
-        arena_w += frames;
-        if(arena_w > kArenaMax) arena_w = kArenaMax;
         zone_n++;
+        arena_w     = start;                                  /* write at the zone start */
+        arena_limit = (start + frames > kArenaMax) ? kArenaMax : start + frames;
     }
-    arena_limit = arena_w;
     char m[32]; snprintf(m, sizeof(m), "H %d", arena_w); send_body(m);
 }
 static void arena_data(const char* body)
@@ -457,9 +459,10 @@ static void arena_data(const char* body)
        extra samples, which shifted every sample after the first message. */
     while(*body && *body != 32) ++body;
     if(*body) ++body;
-    while(arena_w < arena_limit && body[0] && body[1] && body[2] && body[3])
+    while(arena_w < arena_limit)
     {
-        if(body[0] == 42) break;
+        while(*body == 32 || *body == 44) ++body;   /* spaces between groups */
+        if(body[0] == 42 || !body[0] || !body[1] || !body[2] || !body[3]) break;
         const int v = (hexval(body[0]) << 12) | (hexval(body[1]) << 8) | (hexval(body[2]) << 4) | hexval(body[3]);
         kArena[arena_w++] = (int16_t)v;
         body += 4;
@@ -939,6 +942,14 @@ static void handle(const char* body)
 #endif
             break;
         case 'A': send_body("A"); break;
+        case 'E':
+        {
+            /* temporary: show exactly what the dispatcher hands a handler */
+            char m[40]; int k = snprintf(m, sizeof(m), "E");
+            for(int i = 0; i < 8 && body[i]; ++i) k += snprintf(m + k, sizeof(m) - k, " %02X", (uint8_t)body[i]);
+            send_body(m);
+            break;
+        }
         case 'C': arena_open(body); break;
         case 'X': arena_data(body); break;
         case 'G': arena_report(); break;
