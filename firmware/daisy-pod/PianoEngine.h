@@ -52,7 +52,9 @@ class PianoEngine
         }
         V &v = v_[pick];
         v.on   = true;
-        v.bendMul = bend_;
+        /* a fresh note starts unbent: the strip sends its own offset on the next tick, and
+           inheriting the last bend made a new note start sharp or flat and then snap */
+        v.bendMul = 1.0f;
         v.slot = best;
         v.note = (uint8_t)note;
         v.pos  = 0.0f;
