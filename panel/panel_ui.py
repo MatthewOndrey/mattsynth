@@ -5756,7 +5756,20 @@ async function wtPick(i){
 }
 
 let pianoSetName = "Streamed set";
-fetch("/setname").then(r=>r.json()).then(n=>{ if(n){ pianoSetName = n; renderPatchList(); } }).catch(()=>{});
+/* this runs after the saved state is applied, so a named set wins over a stale engine
+   choice in the state file */
+setTimeout(()=>fetch("/setname").then(r=>r.json()).then(n=>{
+  if(!n) return;
+  pianoSetName = n;
+  /* a named set means the Pod is holding samples, so the sampler is the instrument to show
+     until someone picks another one */
+  if(!pianoOn){
+    pianoOn = true; engWT = false;
+    send("P 37 1"); send("P 28 0");
+    paintEng();
+  }
+  renderPatchList();
+}).catch(()=>{}), 1600);
 function renderPatchList(){
   if(pianoOn){
     /* one instrument, so the list says so instead of showing FM patches */
@@ -5796,6 +5809,17 @@ function renderPatchList(){
         o.textContent = labelOf(st) + (labelOf(st) === cur || st.id === cur ? "  *" : "");
         patchSel.appendChild(o);
       });
+      /* rebuilding the list must not move the selection back to the first entry */
+    }
+    /* whatever happened above, the box must show a real choice, never a blank field */
+    const keepId = window.__setSel || (sets.find(st => labelOf(st) === cur) || {}).id;
+    if(keepId && [...patchSel.options].some(o => o.value === "set:" + keepId))
+      patchSel.value = "set:" + keepId;
+    if(patchSel.selectedIndex < 0 && patchSel.options.length){
+      const wantId = (window.__setSel || (sets.find(st => labelOf(st) === pianoSetName) || {}).id);
+      const wantVal = "set:" + wantId;
+      const has = [...patchSel.options].some(o => o.value === wantVal);
+      patchSel.value = has ? wantVal : patchSel.options[0].value;
     }
     return;
   }
@@ -5831,6 +5855,12 @@ patchSel.onchange = ()=>{
   if(typeof v === "string" && v.startsWith("set:")){
     const name = v.slice(4);
     window.__setSel = name;
+    /* picking a sample set means playing the sampler: without this the notes still went to
+       whatever engine was loaded and nothing about the sound changed */
+    pianoOn = true; engWT = false;
+    send("P 37 1"); send("P 28 0");
+    paintEng();
+    saveState();
     fetch("/setload?n=" + encodeURIComponent(name)).then(r=>r.json()).then(j=>{
       if(j.ok){ pianoSetName = name; }
       renderPatchList();
@@ -6024,7 +6054,13 @@ function applyState(s){
   if(typeof s.bank === "string" && s.bank) savedBank = s.bank;
   /* a midi file is never restored: you load one when you want to hear it */
   /* the patterns and the chain come back with everything else */
-  if(typeof s.pianoOn === "boolean") setTimeout(()=>{ pianoOn = s.pianoOn; send("P 37 " + (pianoOn ? 1 : 0)); }, 900);
+  if(typeof s.pianoOn === "boolean") setTimeout(()=>{
+    pianoOn = s.pianoOn;
+    send("P 37 " + (pianoOn ? 1 : 0));
+    /* the button has to be repainted or it keeps saying FM while the sampler is playing */
+    paintEng();
+    renderPatchList();
+  }, 900);
   if(s.clipsState && Array.isArray(s.clipsState.items) && s.clipsState.items.length === 16){
     clips.items = s.clipsState.items;
     clips.active = s.clipsState.active | 0;
