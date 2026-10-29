@@ -5763,12 +5763,32 @@ function renderPatchList(){
     if(patchSel.value !== "-1"){ patchSel.innerHTML = ""; }
 
     const have = [...patchSel.options].map(o=>o.textContent);
-    const label = (typeof pianoSetName !== "undefined" && pianoSetName) ? pianoSetName : "Streamed set";
-    if(have.length !== 1 || have[0] !== label){
+    if(!window.__sets){
+      window.__sets = [];
+      fetch("/sets").then(r=>r.json()).then(list=>{ window.__sets = list; renderPatchList(); }).catch(()=>{});
+    }
+    const sets = window.__sets || [];
+    const labelOf = st => (st && st.name) ? st.name : String(st);
+    if(!sets.length){
+      if(patchSel.options.length !== 1){
+        patchSel.innerHTML = "";
+        const o = document.createElement("option");
+        o.value = "-1"; o.textContent = pianoSetName;
+        patchSel.appendChild(o);
+      }
+      return;
+    }
+    const cur = window.__setSel || pianoSetName;
+    const want = sets.map(st => labelOf(st) + (labelOf(st) === cur || st.id === cur ? "  *" : ""));
+    const have2 = [...patchSel.options].map(o=>o.textContent);
+    if(have2.join("|") !== want.join("|")){
       patchSel.innerHTML = "";
-      const o = document.createElement("option");
-      o.value = "-1"; o.textContent = label;
-      patchSel.appendChild(o);
+      sets.forEach(st=>{
+        const o = document.createElement("option");
+        o.value = "set:" + st.id;
+        o.textContent = labelOf(st) + (labelOf(st) === cur || st.id === cur ? "  *" : "");
+        patchSel.appendChild(o);
+      });
     }
     return;
   }
@@ -5800,7 +5820,17 @@ function selectPatch(i){
   renderPatch();
 }
 patchSel.onchange = ()=>{
-  const i = +patchSel.value;
+  const v = patchSel.value;
+  if(typeof v === "string" && v.startsWith("set:")){
+    const name = v.slice(4);
+    window.__setSel = name;
+    fetch("/setload?n=" + encodeURIComponent(name)).then(r=>r.json()).then(j=>{
+      if(j.ok){ pianoSetName = name; }
+      renderPatchList();
+    }).catch(()=>{});
+    return;
+  }
+  const i = +v;
   if(engWT) wtPick(i); else selectPatch(i);
 };
 /* the arrows follow whichever list the dropdown is showing */
@@ -6347,6 +6377,54 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
+        elif path == "/sets":
+            import os as _os
+            root = _os.path.expanduser("~/slib")
+            names = []
+            try:
+                for d in sorted(_os.listdir(root)):
+                    f = _os.path.join(root, d, "set.json")
+                    if _os.path.exists(f):
+                        try:
+                            names.append({"id": d, "name": json.load(open(f)).get("name", d)})
+                        except Exception:
+                            names.append({"id": d, "name": d})
+            except OSError:
+                pass
+            body = json.dumps(names).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/setload":
+            import os as _os
+            name = _os.path.basename((query.get("n") or [""])[0])
+            root = _os.path.expanduser("~/slib")
+            ok = False
+            try:
+                spec = json.load(open(_os.path.join(root, name, "set.json")))
+                send_body("C 0")
+                for z in spec["zones"]:
+                    raw = open(_os.path.join(root, name, z["file"]), "rb").read()
+                    frames = len(raw) // 2
+                    send_body("C %d %d" % (frames, int(z["root"])))
+                    for i in range(0, len(raw), 256):
+                        blk = raw[i:i + 256]
+                        vals = [int.from_bytes(blk[j:j + 2], "little", signed=True)
+                                for j in range(0, len(blk) - 1, 2)]
+                        send_body("X " + "".join("%04X" % (v & 0xFFFF) for v in vals))
+                send_body("G")
+                open(_os.path.join(root, "current.txt"), "w").write(spec.get("name", name))
+                ok = True
+            except Exception:
+                ok = False
+            body = json.dumps({"ok": ok}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif path == "/setname":
             import os as _os
             name = (query.get("n") or [""])[0].strip()
