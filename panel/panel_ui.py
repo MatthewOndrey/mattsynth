@@ -5763,9 +5763,16 @@ function renderPatchList(){
     if(patchSel.value !== "-1"){ patchSel.innerHTML = ""; }
 
     const have = [...patchSel.options].map(o=>o.textContent);
-    if(!window.__sets){
-      window.__sets = [];
-      fetch("/sets").then(r=>r.json()).then(list=>{ window.__sets = list; renderPatchList(); }).catch(()=>{});
+    /* the set list is asked for again every few seconds, so a set built on the Pi shows up
+       without reloading the page */
+    if(!window.__sets || Date.now() - (window.__setsAt || 0) > 5000){
+      window.__setsAt = Date.now();
+      if(!window.__sets) window.__sets = [];
+      fetch("/sets").then(r=>r.json()).then(list=>{
+        const before = (window.__sets || []).length;
+        window.__sets = list;
+        if(list.length !== before) renderPatchList();
+      }).catch(()=>{});
     }
     const sets = window.__sets || [];
     const labelOf = st => (st && st.name) ? st.name : String(st);
