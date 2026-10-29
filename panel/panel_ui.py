@@ -5278,27 +5278,6 @@ function showFingers(){
 
 /* a bend leaves a comet trail: color runs cyan at full flat to red at full sharp */
 let lastTrail = 0;
-/* the number under the finger while a bend is live: semitones to two places, and the
-   raw cents, so the strip can be judged instead of guessed */
-function bendReadout(x, y, cents){
-  let el = document.getElementById("bendread");
-  if(!el){
-    el = document.createElement("div");
-    el.id = "bendread";
-    el.style.cssText = "position:fixed;z-index:60;pointer-events:none;font:700 15px ui-monospace,monospace;" +
-      "color:#0a0a0a;background:#7fd1ff;padding:2px 8px;border-radius:4px;transform:translate(-50%,-160%);" +
-      "box-shadow:0 2px 8px rgba(0,0,0,.5);";
-    document.body.appendChild(el);
-  }
-  const st = (cents / 100);
-  el.textContent = (st >= 0 ? "+" : "") + st.toFixed(2) + " st  " + (cents >= 0 ? "+" : "") + cents + "c";
-  el.style.left = (x || 0) + "px";
-  el.style.top = (y || 0) + "px";
-  el.style.display = "block";
-  clearTimeout(el.__t);
-  el.__t = setTimeout(()=>{ el.style.display = "none"; }, 900);
-}
-
 function bendTrail(x, y, cents, range){
   if(x === undefined || y === undefined) return;
   const now = performance.now();
