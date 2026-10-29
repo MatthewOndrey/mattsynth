@@ -5836,11 +5836,11 @@ function renderPatchList(){
       patchSel.appendChild(o);
     });
   }
-  if(patches.length) patchSel.value = patchIdx;
+  if(!pianoOn && patches.length) patchSel.value = patchIdx;
 }
 function renderPatch(){
   document.getElementById("algfb").textContent = "fb " + patchFb;
-  if(patches.length) patchSel.value = patchIdx;
+  if(!pianoOn && patches.length) patchSel.value = patchIdx;
   algSel.value = patchAlg;
 }
 function selectPatch(i){
@@ -5862,12 +5862,13 @@ patchSel.onchange = ()=>{
     paintEng();
     saveState();
     fetch("/setload?n=" + encodeURIComponent(name)).then(r=>r.json()).then(j=>{
-      if(j.ok){ pianoSetName = name; }
-      renderPatchList();
-      /* the redraw must leave the field showing the set that was just chosen */
-      const v2 = "set:" + name;
-      if([...patchSel.options].some(o => o.value === v2)) patchSel.value = v2;
-      else if(patchSel.options.length) patchSel.selectedIndex = 0;
+      try{
+        if(j && j.ok) pianoSetName = name;
+        renderPatchList();
+        const v2 = "set:" + name;
+        if([...patchSel.options].some(o => o.value === v2)) patchSel.value = v2;
+        else if(patchSel.options.length) patchSel.selectedIndex = 0;
+      }catch(e){}
     }).catch(()=>{});
     return;
   }
