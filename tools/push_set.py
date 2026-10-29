@@ -12,6 +12,7 @@ import os
 import struct
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 SEND = "http://127.0.0.1:8080/send"
@@ -43,6 +44,12 @@ def main():
             send("X " + "".join("%04X" % (v & 0xFFFF) for v in vals))
         print("  %-6s root %-3s %6d frames" % (name, root, frames))
     send("G")
+    # tell the panel what is loaded, so the header names the set rather than guessing
+    try:
+        name = os.path.basename(os.path.normpath(folder)) or "Streamed set"
+        urllib.request.urlopen("http://127.0.0.1:8080/setname?n=" + urllib.parse.quote(name), timeout=4).read()
+    except Exception:
+        pass
     dt = time.time() - t0
     print("%d zones, %d frames, %.1fs" % (len(zones), total, dt))
     return 0

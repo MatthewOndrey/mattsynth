@@ -5756,6 +5756,7 @@ async function wtPick(i){
 }
 
 let pianoSetName = "Streamed set";
+fetch("/setname").then(r=>r.json()).then(n=>{ if(n){ pianoSetName = n; renderPatchList(); } }).catch(()=>{});
 function renderPatchList(){
   if(pianoOn){
     /* one instrument, so the list says so instead of showing FM patches */
@@ -6346,6 +6347,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
+        elif path == "/setname":
+            import os as _os
+            name = (query.get("n") or [""])[0].strip()
+            pathf = _os.path.expanduser("~/slib/current.txt")
+            if name:
+                try:
+                    _os.makedirs(_os.path.dirname(pathf), exist_ok=True)
+                    open(pathf, "w").write(name[:40])
+                except OSError:
+                    pass
+            else:
+                try:
+                    name = open(pathf).read().strip() or "Streamed set"
+                except OSError:
+                    name = "Streamed set"
+            body = json.dumps(name).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif path == "/songs":
             names = []
             try:
