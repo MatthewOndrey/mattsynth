@@ -183,14 +183,31 @@ def send_body(body):
     for ch in raw:
         cs ^= ch
     frame = b"@" + raw + ("*%02X\n" % cs).encode()
-    with sock_lock:
-        s = sock
-    if s is None:
-        return
-    try:
-        s.sendall(frame)
-    except OSError:
-        pass
+    global sock
+    for _ in (0, 1):
+        with sock_lock:
+            s = sock
+        if s is None:
+            try:
+                s = socket.create_connection(BRIDGE, timeout=5)
+                s.settimeout(None)
+                with sock_lock:
+                    sock = s
+            except OSError:
+                time.sleep(0.05)
+                continue
+        try:
+            s.sendall(frame)
+            return
+        except OSError:
+            # the bridge drops the connection when it is flooded: reopen and resend once
+            with sock_lock:
+                sock = None
+            try:
+                s.close()
+            except OSError:
+                pass
+            time.sleep(0.05)
 
 
 def reader():
@@ -6457,11 +6474,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     raw = open(_os.path.join(root, name, z["file"]), "rb").read()
                     frames = len(raw) // 2
                     send_body("C %d %d" % (frames, int(z["root"])))
-                    for i in range(0, len(raw), 256):
-                        blk = raw[i:i + 256]
+                    # 32 samples per frame: long lines were being truncated by the bridge,
+                    # which left the Pod with half a sample and every later one shifted
+                    import time as _time
+                    for i in range(0, len(raw), 64):
+                        blk = raw[i:i + 64]
                         vals = [int.from_bytes(blk[j:j + 2], "little", signed=True)
                                 for j in range(0, len(blk) - 1, 2)]
                         send_body("X " + "".join("%04X" % (v & 0xFFFF) for v in vals))
+                        if (i // 64) % 32 == 31:
+                            _time.sleep(0.004)   # let the Pod drink: it has no flow control
                 send_body("G")
                 open(_os.path.join(root, "current.txt"), "w").write(spec.get("name", name))
                 ok = True
