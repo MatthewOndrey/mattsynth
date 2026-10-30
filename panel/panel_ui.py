@@ -5472,8 +5472,9 @@ function buildSmpl(){
     const dt = last ? Math.min(64, ts - last) : 16;
     last = ts;
     if(smplPlaying){
-      const rate = Math.pow(2, (smplNote - smplRoot) / 12);   /* the pitch it is played at */
-      smplPlay += (dt * rate) / sampleMs();
+      /* the width of the display is the whole sample, so one pass takes exactly as long as
+         the sample runs: no pitch scaling, the head is a map of the file, not of the note */
+      smplPlay += dt / sampleMs();
       if(smplPlay >= smplB) smplPlay = smplA + (smplPlay - smplB);
       if(smplPlay >= 1) smplPlaying = false;
       smplDraw();
