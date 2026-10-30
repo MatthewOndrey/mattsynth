@@ -1269,8 +1269,9 @@ function makePad(step, cls, showOct){
 }
 
 /* controllers live in #view; add a builder and a button to get another one */
-function buildKalimba(){
-  const v=document.getElementById("view"); v.innerHTML="";
+function buildKalimba(target){
+  const v = target || document.getElementById("view");
+  v.innerHTML="";
   /* two rows of fat tines like the original, just more of them: the upper row is
      inset by half a pad so the two rows interlock the way a kalimba's do */
   const top=document.createElement("div"); top.className="row"; top.id="top";
@@ -5362,6 +5363,12 @@ function buildSmpl(){
     send("P 48 " + Math.round(smplB * 1000));
     document.getElementById("smplstat").textContent = "applied";
   };
+  /* a squashed kalimba under the waveform: hold a tine while you move the loop points */
+  const keys = document.createElement("div");
+  keys.id = "smplkeys";
+  keys.style.cssText = "margin-top:10px;height:calc(100vh - 520px);min-height:150px;display:flex;flex-direction:column;gap:6px";
+  v.appendChild(keys);
+  setTimeout(()=>{ try{ buildKalimba(keys); }catch(e){} }, 0);
   document.getElementById("smplsave").onclick = ()=>{
     fetch("/loopsave?n=" + encodeURIComponent(smplSet || pianoSetName) +
           "&a=" + Math.round(smplA * 1000) + "&b=" + Math.round(smplB * 1000))
