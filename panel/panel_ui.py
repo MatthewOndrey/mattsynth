@@ -775,6 +775,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
     <button id="pprev" class="pbtn">&lsaquo;</button>
     <select id="patchsel" class="pbtn"></select>
     <button id="pnext" class="pbtn">&rsaquo;</button>
+    <div id="setprog" style="display:none;position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:99;background:#101820;border:1px solid #2b3b4a;border-radius:10px;padding:10px 16px;font:700 15px ui-monospace,monospace;color:#7fd1ff">loading</div>
     <button id="engsel" class="pbtn" title="oscillator engine">FM</button>
     <select id="banksel" class="pbtn" title="bank file"></select>
     <button id="bankload" class="pbtn">LOAD</button>
@@ -5925,6 +5926,8 @@ patchSel.onchange = ()=>{
     send("P 37 1"); send("P 28 0");
     paintEng();
     saveState();
+    const prog = document.getElementById("setprog");
+    if(prog){ prog.style.display = "block"; prog.textContent = "loading " + name + " ..."; }
     fetch("/setload?n=" + encodeURIComponent(name)).then(r=>r.json()).then(j=>{
       try{
         if(j && j.ok){ pianoSetName = name; paintSlots(); }
@@ -5933,7 +5936,8 @@ patchSel.onchange = ()=>{
         if([...patchSel.options].some(o => o.value === v2)) patchSel.value = v2;
         else if(patchSel.options.length) patchSel.selectedIndex = 0;
       }catch(e){}
-    }).catch(()=>{});
+      if(prog){ prog.textContent = name + " ready"; setTimeout(()=>{ prog.style.display = "none"; }, 1500); }
+    }).catch(()=>{ if(prog) prog.style.display = "none"; });
     return;
   }
   const i = +v;
@@ -6499,6 +6503,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
+        elif path == "/progress":
+            import os as _os
+            txt = ""
+            try:
+                txt = open(_os.path.expanduser("~/slib/progress.txt")).read().strip()
+            except OSError:
+                pass
+            body = txt.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif path == "/sets":
             import os as _os
             root = _os.path.expanduser("~/slib")

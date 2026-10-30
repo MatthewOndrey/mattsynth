@@ -140,7 +140,25 @@ class PianoEngine
                 const uint32_t p = (uint32_t)v.pos;
                 if(p + 1 >= len) { v.on = false; break; }
                 const float fr = v.pos - (float)p;
-                const float a  = src[p] * (1.0f - fr) + src[p + 1] * fr;
+                float a = src[p] * (1.0f - fr) + src[p + 1] * fr;
+                /* crossfade into the loop instead of jumping: a hard seam between two points
+                   that are not in phase beats against itself, which is the wobble you hear */
+                if(loopOn_ && !v.releasing)
+                {
+                    const float xf = 720.0f;                    /* fifteen milliseconds */
+                    const float fadeAt = v.loopB - xf;
+                    if(v.pos >= fadeAt && v.loopB > v.loopA + xf * 2.0f)
+                    {
+                        const float t  = (v.pos - fadeAt) / xf;
+                        const uint32_t p2 = (uint32_t)(v.loopA + (v.pos - fadeAt));
+                        if(p2 + 1 < len)
+                        {
+                            const float fr2 = v.loopA + (v.pos - fadeAt) - (float)p2;
+                            const float a2  = src[p2] * (1.0f - fr2) + src[p2 + 1] * fr2;
+                            a = a * (1.0f - t) + a2 * t;
+                        }
+                    }
+                }
                 float s = (a / 32768.0f) * v.amp;
                 if(s >  1.0f) s =  1.0f;            /* soft ceiling, no hard clip on sums */
                 if(s < -1.0f) s = -1.0f;
