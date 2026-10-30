@@ -5414,7 +5414,7 @@ function buildSmpl(){
   row.innerHTML =
     '<label>LOOP A <input id="smpla" type="range" min="0" max="990" value="' + Math.round(smplA * 1000) + '" style="width:280px"></label>' +
     '<label>LOOP B <input id="smplb" type="range" min="10" max="1000" value="' + Math.round(smplB * 1000) + '" style="width:280px"></label>' +
-    '<label>HEAD <input id="smplhead" type="range" min="20" max="200" value="100" style="width:200px"></label>' +
+    '<label>HEAD <span id="smplheadv">100%</span><input id="smplhead" type="range" min="20" max="200" value="100" style="width:200px"></label>' +
     '<span id="smplval"></span>';
   wrap.appendChild(row);
 
@@ -5450,6 +5450,7 @@ function buildSmpl(){
   document.getElementById("smplb").oninput = smplSync;
   document.getElementById("smplhead").oninput = ev=>{
     smplHeadScale = (+ev.target.value) / 100;
+    document.getElementById("smplheadv").textContent = ev.target.value + "%";
   };
   document.getElementById("smplstyle").onclick = ()=>{
     smplStyle = (smplStyle + 1) % 3;
