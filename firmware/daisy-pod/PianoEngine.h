@@ -57,6 +57,9 @@ class PianoEngine
         /* a fresh note starts unbent: the strip sends its own offset on the next tick, and
            inheriting the last bend made a new note start sharp or flat and then snap */
         v.bendMul = 1.0f;
+        /* a voice that was released keeps that flag: reusing it without clearing it faded
+           the new note out instantly, which is why every note after the first plucked */
+        v.releasing = false;
         v.slot = best;
         v.note = (uint8_t)note;
         v.pos  = 0.0f;
@@ -180,6 +183,24 @@ public:
        it was recorded at. Up to five, which is what the root slots already allowed. */
     void ResetZones() { zoneCount_ = 0; arenaRoot = -1; }
     void SetLoop(bool b) { loopOn_ = b; }
+    /* put the samples that live in flash back into the buffer: loading a set overwrites it,
+       and without this the pianos would keep playing whatever the arena last held */
+    void LoadBaked()
+    {
+        uint32_t at = 0;
+        for(int i = 0; i < 5; i++)
+        {
+            off_[i] = at;
+            len_[i] = kPiano[i].len;
+            if(at + kPiano[i].len <= 600000)
+                memcpy(&g_pno_buf[at], kPiano[i].data, kPiano[i].len * 2);
+            at += kPiano[i].len;
+        }
+        zoneCount_ = 0;
+        arenaRoot = -1;
+        for(int i = 0; i < kVoices; i++) v_[i].on = false;
+    }
+
     int zoneCount() const { return zoneCount_; }
     int zoneLen(int z) const { return (z >= 0 && z < 5) ? (int)len_[z] : -1; }
     int zoneOff(int z) const { return (z >= 0 && z < 5) ? (int)off_[z] : -1; }
