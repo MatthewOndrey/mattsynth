@@ -5422,17 +5422,23 @@ function buildSmpl(){
   };
 
   /* the play head runs while a tine is held, at the pitch of the sample */
-  const tick = ()=>{
+  /* the head starts at zero, because that is where the note starts, then loops A to B.
+     The sets are all trimmed to 2.4 seconds, so one pass takes that long. */
+  const SAMPLE_MS = 2400;
+  let last = 0;
+  const tick = (ts)=>{
+    const dt = last ? Math.min(64, ts - last) : 16;
+    last = ts;
     if(smplPlaying){
-      const span = Math.max(0.02, smplB - smplA);
-      smplPlay += 0.0009 / span;
-      if(smplPlay >= smplB) smplPlay = smplA + 0.001;
+      smplPlay += dt / SAMPLE_MS;
+      if(smplPlay >= smplB) smplPlay = smplA + (smplPlay - smplB);
+      if(smplPlay >= 1) smplPlaying = false;
       smplDraw();
     }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  keys.addEventListener("pointerdown", ()=>{ smplPlaying = true; smplPlay = smplA; });
+  keys.addEventListener("pointerdown", ()=>{ smplPlaying = true; smplPlay = 0; });
   keys.addEventListener("pointerup", ()=>{ smplPlaying = false; smplDraw(); });
   keys.addEventListener("pointercancel", ()=>{ smplPlaying = false; smplDraw(); });
 
