@@ -5500,7 +5500,10 @@ document.getElementById("octup").onclick=()=>{ oct=Math.min(4,oct+1); renderView
 document.getElementById("keyb").onclick=()=>{ keySel=(keySel+1)%12; label(); renderView(); };
 document.getElementById("typeb").onclick=()=>{ typeSel=(typeSel+1)%7; label(); renderView(); };
 document.getElementById("chordb").onclick=()=>{ chord=!chord; label(); };
-document.getElementById("sustb").onclick=()=>{ sust=!sust; label(); };
+document.getElementById("sustb").onclick=()=>{
+  sust=!sust; label();
+  send("P 44 " + (sust ? 1 : 0));   /* the sampler holds its voices while this is on */
+};
 document.getElementById("panic").onclick=()=>{ send("R"); releaseHeldNote(); };
 
 /* bend range, in cents at full deflection: the strip scales to whatever this says */
@@ -5748,7 +5751,9 @@ function paintSlots(){
   [0, 1].forEach(p=>{
     const b = document.getElementById(p ? "slotB" : "slotA");
     if(!b) return;
-    b.textContent = (p ? "B: " : "A: ") + (slotName[p] || "init");
+    /* with the sampler loaded the slots are holding a sample set, not an FM patch */
+    const nm = pianoOn ? pianoSetName : (slotName[p] || "init");
+    b.textContent = (p ? "B: " : "A: ") + nm;
     b.classList.toggle("on", p === wtPart);
   });
 }
@@ -5827,6 +5832,7 @@ setTimeout(()=>fetch("/setname").then(r=>r.json()).then(n=>{
     paintEng();
   }
   renderPatchList();
+  try{ paintSlots(); }catch(e){}
 }).catch(()=>{}), 1600);
 function renderPatchList(){
   if(pianoOn){
@@ -5921,7 +5927,7 @@ patchSel.onchange = ()=>{
     saveState();
     fetch("/setload?n=" + encodeURIComponent(name)).then(r=>r.json()).then(j=>{
       try{
-        if(j && j.ok) pianoSetName = name;
+        if(j && j.ok){ pianoSetName = name; paintSlots(); }
         renderPatchList();
         const v2 = "set:" + name;
         if([...patchSel.options].some(o => o.value === v2)) patchSel.value = v2;
@@ -5935,6 +5941,16 @@ patchSel.onchange = ()=>{
 };
 /* the arrows follow whichever list the dropdown is showing */
 function patchStep(d){
+  if(pianoOn){
+    const sets = window.__sets || [];
+    if(!sets.length) return;
+    const cur = window.__setSel || (sets.find(st => (st.name || st.id) === pianoSetName) || {}).id;
+    let i = sets.findIndex(st => st.id === cur);
+    if(i < 0) i = 0; else i = (i + d + sets.length) % sets.length;
+    patchSel.value = "set:" + sets[i].id;
+    patchSel.dispatchEvent(new Event("change"));
+    return;
+  }
   if(engWT){
     const n = (wtListItems || []).length;
     if(!n) return;
