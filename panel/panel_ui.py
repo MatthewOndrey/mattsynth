@@ -5307,7 +5307,7 @@ function buildKit(){
 /* ---- sample editor: loop points, waveform and an auditioning kalimba ---- */
 let smplSet = "", smplA = 0.45, smplB = 0.92, smplPeaks = [];
 let smplCanvas = null, smplHot = null, smplPlay = 0, smplPlaying = false;
-let smplFrames = 115200, smplRoot = 60, smplNote = 60, smplStyle = 0, smplRaf = 0, smplSendT = 0;
+let smplFrames = 115200, smplRoot = 60, smplNote = 60, smplStyle = 0, smplRaf = 0, smplSendT = 0, smplGen = 0;
 
 function smplDraw(){
   const cv = smplCanvas;
@@ -5468,7 +5468,9 @@ function buildSmpl(){
      The sets are all trimmed to 2.4 seconds, so one pass takes that long. */
   const sampleMs = ()=> (smplFrames / 48000) * 1000;
   let last = 0;
+  const gen = ++smplGen;                    /* only the newest build may run the head */
   const tick = (ts)=>{
+    if(gen !== smplGen) return;
     const dt = last ? Math.min(64, ts - last) : 16;
     last = ts;
     if(smplPlaying){
