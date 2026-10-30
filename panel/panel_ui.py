@@ -5633,6 +5633,10 @@ function paintEng(){
   const b = document.getElementById("engsel");
   if(!b) return;
   b.textContent = pianoOn ? "PIANO" : (engWT ? "WT" : "FM");
+  /* the list belongs to the engine: whenever the engine changes, so must the list, and the
+     cached set list has to be invalidated or coming back to PIANO would show the old one */
+  window.__setIds = null;
+  try{ renderPatchList(); }catch(e){}
   b.style.minWidth = "78px";
   b.classList.toggle("on", engWT || pianoOn);
   FXK.forEach(k=>{
