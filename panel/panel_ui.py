@@ -1034,6 +1034,9 @@ function wsStart(){
 wsStart();
 
 function send(body){
+  if(typeof arguments[0]==="string" && arguments[0].slice(0,2)==="N "){
+    const nn=parseInt(arguments[0].split(" ")[1],10); if(!isNaN(nn)) window.__lastNote=nn;
+  }
   if(wsLink && wsLink.readyState === 1){
     try{ wsLink.send(body); return; }catch(e){}
   }
@@ -5304,6 +5307,7 @@ function buildKit(){
 /* ---- sample editor: loop points, waveform and an auditioning kalimba ---- */
 let smplSet = "", smplA = 0.45, smplB = 0.92, smplPeaks = [];
 let smplCanvas = null, smplHot = null, smplPlay = 0, smplPlaying = false;
+let smplFrames = 115200, smplRoot = 60, smplNote = 60, smplStyle = 0;
 
 function smplDraw(){
   const cv = smplCanvas;
@@ -5317,12 +5321,39 @@ function smplDraw(){
   g.fillStyle = "rgba(255,209,102,0.06)"; g.fillRect(xa, 0, xb - xa, H);
   if(smplPeaks.length){
     const w = W / smplPeaks.length;
-    for(let i = 0; i < smplPeaks.length; i++){
-      const x = i * w;
-      const inside = x >= xa && x <= xb;
-      const h = Math.max(1, (smplPeaks[i] / 32768) * (H * 0.44));
-      g.fillStyle = inside ? "#7fd1ff" : "#33586e";
-      g.fillRect(x, mid - h, Math.max(1, w - 0.4), h * 2);
+    const hOf = i => Math.max(1, (smplPeaks[i] / 32768) * (H * 0.44));
+    if(smplStyle === 0){
+      for(let i = 0; i < smplPeaks.length; i++){
+        const x = i * w, inside = x >= xa && x <= xb, h = hOf(i);
+        g.fillStyle = inside ? "#7fd1ff" : "#33586e";
+        g.fillRect(x, mid - h, Math.max(1, w - 0.4), h * 2);
+      }
+    } else if(smplStyle === 1){
+      /* filled envelope: smoother, reads like a tape machine's meter */
+      const grd = g.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, "rgba(127,209,255,0.95)");
+      grd.addColorStop(0.5, "rgba(60,130,180,0.55)");
+      grd.addColorStop(1, "rgba(127,209,255,0.95)");
+      g.fillStyle = grd;
+      g.beginPath(); g.moveTo(0, mid);
+      for(let i = 0; i < smplPeaks.length; i++) g.lineTo(i * w, mid - hOf(i));
+      for(let i = smplPeaks.length - 1; i >= 0; i--) g.lineTo(i * w, mid + hOf(i));
+      g.closePath(); g.fill();
+      g.fillStyle = "rgba(255,209,102,0.10)"; g.fillRect(xa, 0, xb - xa, H);
+    } else {
+      /* outline: just the peaks, quiet and clean */
+      g.strokeStyle = "#7fd1ff"; g.lineWidth = 2; g.beginPath();
+      for(let i = 0; i < smplPeaks.length; i++){
+        const x = i * w, h = hOf(i);
+        i ? g.lineTo(x, mid - h) : g.moveTo(x, mid - h);
+      }
+      g.stroke();
+      g.strokeStyle = "#4b7d99"; g.beginPath();
+      for(let i = 0; i < smplPeaks.length; i++){
+        const x = i * w, h = hOf(i);
+        i ? g.lineTo(x, mid + h) : g.moveTo(x, mid + h);
+      }
+      g.stroke();
     }
   }
   /* play head */
@@ -5363,7 +5394,7 @@ function buildSmpl(){
   head.style.cssText = "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px";
   head.innerHTML = '<b style="color:#7fd1ff">SAMPLE</b><span id="smplname">-</span>' +
     '<button id="smplapply" class="pbtn">APPLY</button><button id="smplsave" class="pbtn">SAVE</button>' +
-    '<span id="smplstat" style="color:#7fd1ff"></span>';
+    '<button id="smplstyle" class="pbtn">STYLE</button><span id="smplstat" style="color:#7fd1ff"></span>';
   wrap.appendChild(head);
 
   const cv = document.createElement("canvas");
@@ -5410,6 +5441,11 @@ function buildSmpl(){
 
   document.getElementById("smpla").oninput = smplSync;
   document.getElementById("smplb").oninput = smplSync;
+  document.getElementById("smplstyle").onclick = ()=>{
+    smplStyle = (smplStyle + 1) % 3;
+    document.getElementById("smplstat").textContent = ["bars","filled","outline"][smplStyle];
+    smplDraw();
+  };
   document.getElementById("smplapply").onclick = ()=>{
     send("P 47 " + Math.round(smplA * 1000));
     send("P 48 " + Math.round(smplB * 1000));
@@ -5424,13 +5460,14 @@ function buildSmpl(){
   /* the play head runs while a tine is held, at the pitch of the sample */
   /* the head starts at zero, because that is where the note starts, then loops A to B.
      The sets are all trimmed to 2.4 seconds, so one pass takes that long. */
-  const SAMPLE_MS = 2400;
+  const sampleMs = ()=> (smplFrames / 48000) * 1000;
   let last = 0;
   const tick = (ts)=>{
     const dt = last ? Math.min(64, ts - last) : 16;
     last = ts;
     if(smplPlaying){
-      smplPlay += dt / SAMPLE_MS;
+      const rate = Math.pow(2, (smplNote - smplRoot) / 12);   /* the pitch it is played at */
+      smplPlay += (dt * rate) / sampleMs();
       if(smplPlay >= smplB) smplPlay = smplA + (smplPlay - smplB);
       if(smplPlay >= 1) smplPlaying = false;
       smplDraw();
@@ -5438,7 +5475,11 @@ function buildSmpl(){
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  keys.addEventListener("pointerdown", ()=>{ smplPlaying = true; smplPlay = 0; });
+  keys.addEventListener("pointerdown", ()=>{
+    const el = document.elementFromPoint(window.event ? 0 : 0, 0);
+    smplPlaying = true; smplPlay = 0;
+    if(window.__lastNote != null) smplNote = window.__lastNote;
+  }, true);
   keys.addEventListener("pointerup", ()=>{ smplPlaying = false; smplDraw(); });
   keys.addEventListener("pointercancel", ()=>{ smplPlaying = false; smplDraw(); });
 
@@ -5452,7 +5493,11 @@ function buildSmpl(){
       document.getElementById("smplname").textContent = st ? (st.name || st.id) : nm;
       return fetch("/wave?n=" + encodeURIComponent(smplSet)).then(r=>r.json());
     });
-  }).then(p=>{ smplPeaks = p || []; smplDraw(); }).catch(()=>{});
+  }).then(p=>{
+    if(p && p.peaks){ smplPeaks = p.peaks; smplFrames = p.frames || 115200; smplRoot = p.root != null ? p.root : 60; }
+    else { smplPeaks = p || []; }
+    smplDraw();
+  }).catch(()=>{});
 
   smplSync();
 }
@@ -6707,7 +6752,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     peaks.append(hi)
             except Exception:
                 peaks = []
-            body = json.dumps(peaks).encode()
+            info = {"peaks": peaks, "frames": 0, "root": 60}
+            try:
+                info["frames"] = os.path.getsize(
+                    os.path.join(_os.path.expanduser("~/slib"), name, spec["zones"][0]["file"])) // 2
+                info["root"] = int(spec["zones"][0]["root"])
+            except Exception:
+                pass
+            body = json.dumps(info).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
