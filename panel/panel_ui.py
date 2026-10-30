@@ -5509,6 +5509,7 @@ function buildSmpl(){
       if(p.loopB != null) smplB = p.loopB;
       document.getElementById("smpla").value = Math.round(smplA * 1000);
       document.getElementById("smplb").value = Math.round(smplB * 1000);
+      smplSync();                      /* the readout has to follow the loaded window */
     }
     else { smplPeaks = p || []; }
     smplDraw();
