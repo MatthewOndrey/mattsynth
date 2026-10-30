@@ -5307,7 +5307,7 @@ function buildKit(){
 /* ---- sample editor: loop points, waveform and an auditioning kalimba ---- */
 let smplSet = "", smplA = 0.45, smplB = 0.92, smplPeaks = [];
 let smplCanvas = null, smplHot = null, smplPlay = 0, smplPlaying = false;
-let smplFrames = 115200, smplRoot = 60, smplNote = 60, smplStyle = 0;
+let smplFrames = 115200, smplRoot = 60, smplNote = 60, smplStyle = 0, smplRaf = 0, smplSendT = 0;
 
 function smplDraw(){
   const cv = smplCanvas;
@@ -5382,6 +5382,12 @@ function smplSync(){
   document.getElementById("smplval").textContent =
     "A " + (smplA * 100).toFixed(1) + "%  B " + (smplB * 100).toFixed(1) + "%";
   smplDraw();
+  /* apply as you move, so the note you are holding changes under your finger */
+  clearTimeout(smplSendT);
+  smplSendT = setTimeout(()=>{
+    send("P 47 " + Math.round(smplA * 1000));
+    send("P 48 " + Math.round(smplB * 1000));
+  }, 80);
 }
 
 function buildSmpl(){
@@ -5474,7 +5480,8 @@ function buildSmpl(){
     }
     requestAnimationFrame(tick);
   };
-  requestAnimationFrame(tick);
+  if(smplRaf) cancelAnimationFrame(smplRaf);
+  smplRaf = requestAnimationFrame(tick);
   keys.addEventListener("pointerdown", ()=>{
     const el = document.elementFromPoint(window.event ? 0 : 0, 0);
     smplPlaying = true; smplPlay = 0;
