@@ -65,6 +65,8 @@ class PianoEngine
                                               : (arenaRoot >= 0 ? arenaRoot : kPiano[best].note);
         v.base = powf(2.0f, (note - bestRoot) / 12.0f) * powf(2.0f, (float)cents / 1200.0f);
         v.rate = v.base * v.bendMul;
+        v.loopA = (float)len_[best] * 0.45f;
+        v.loopB = (float)len_[best] * 0.92f;
         v.amp  = (vel / 127.0f) * 0.85f;
     }
 
@@ -76,6 +78,18 @@ class PianoEngine
     }
 
     void KillAll() { for(int i = 0; i < kVoices; i++) v_[i].on = false; }
+
+    /* A finger lifted has to stop the sample, not let it ring to the end of the file. The
+       voice fades over about twenty milliseconds so there is no click. */
+    void Release(int note)
+    {
+        for(int i = 0; i < kVoices; i++)
+        {
+            V &v = v_[i];
+            if(v.on && !v.releasing && (note < 0 || (int)v.note == note))
+                v.releasing = true;
+        }
+    }
 
     /* TEMPORARY: what the sample voice is actually running at */
     bool Debug(int note, int *outNote, int *outRate1000, int *outBend1000)
@@ -126,12 +140,20 @@ class PianoEngine
                 l[i] += s;
                 r[i] += s;
                 v.pos += v.rate;
+                if(loopOn_ && !v.releasing && v.loopB > v.loopA + 64.0f && v.pos >= v.loopB)
+                    v.pos -= (v.loopB - v.loopA);        /* hold the note for as long as it is held */
+                if(v.releasing)
+                {
+                    v.amp *= 0.9990f;                 /* about twenty milliseconds to silence */
+                    if(v.amp < 0.0008f) { v.on = false; break; }
+                }
             }
         }
     }
 
   private:
-    struct V { bool on; int slot; uint8_t note; float pos, base, rate, amp, bendMul = 1.0f; };
+    struct V { bool on; int slot; uint8_t note; float pos, base, rate, amp, bendMul = 1.0f;
+               bool releasing = false; float loopA = 0.0f, loopB = 0.0f; };
 
 public:
     /* When a sample has been pushed over the link it lives at the start of the buffer and
@@ -139,6 +161,7 @@ public:
        rather than from the baked in table. */
     int arenaRoot = -1;
     int zoneRoot_[5] = {0, 0, 0, 0, 0};
+    bool loopOn_ = true;    /* sustained by default: the loader turns it off for pianos */   /* sustained instruments loop the body of the sample */
     int zoneCount_ = 0;
     void UseArena(int frames, int root)
     {
@@ -152,6 +175,7 @@ public:
     /* A zone is one pushed sample: where it sits in the arena, how long it is and what note
        it was recorded at. Up to five, which is what the root slots already allowed. */
     void ResetZones() { zoneCount_ = 0; arenaRoot = -1; }
+    void SetLoop(bool b) { loopOn_ = b; }
     void SetZone(int z, int off, int len, int root)
     {
         if(z < 0 || z > 4) return;

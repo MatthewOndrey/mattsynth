@@ -41,6 +41,7 @@
 #include "PianoEngine.h"
 
 static bool kit_on = false;
+static bool p_sustain = false;   /* sampler: hold voices until the pedal is lifted */
 static bool trace_bend = false;   /* TEMPORARY */
 static bool piano_on = false;
 KitEngine kit;
@@ -832,6 +833,8 @@ static void handle(const char* body)
                         held_notes--;
                     synth.NoteOff((uint8_t)clampi(a, 0, 127), n >= 2 ? cents : -1,
                                   n >= 3 ? (uint8_t)clampi(tag, 0, 1) : 0);
+                    if(piano_on && !p_sustain)
+                        piano.Release(clampi(a, 0, 127));   /* lifting a finger stops the sample */
                 }
             }
             break;
@@ -840,6 +843,8 @@ static void handle(const char* body)
             {
                 if(a == 36) { kit_on = (b != 0); if(!kit_on) kit.KillAll(); }
                 else if(a == 37) { piano_on = (b != 0); if(!piano_on) piano.KillAll(); }
+                else if(a == 44) { p_sustain = (b != 0); if(!p_sustain) piano.Release(-1); }
+                else if(a == 45) { piano.SetLoop(b != 0); char m[24]; snprintf(m, sizeof(m), "L 45 %d", b != 0); send_body(m); }
                 else apply_param(a, b);
             }
             break;
