@@ -210,6 +210,38 @@ def send_body(body):
             time.sleep(0.05)
 
 
+# --- flow control for bulk sample transfers ------------------------------------------
+# The Pod has no serial flow control: pour frames at it and it overruns. It answers each data
+# frame with how many samples it now holds, and the loader waits for that before the next one.
+ack_val = -1
+ack_cond = threading.Condition()
+
+
+def reset_ack():
+    global ack_val
+    with ack_cond:
+        ack_val = -1
+
+
+def note_ack(n):
+    global ack_val
+    with ack_cond:
+        if n > ack_val:
+            ack_val = n
+        ack_cond.notify_all()
+
+
+def wait_ack(target, timeout=0.4):
+    end = time.time() + timeout
+    with ack_cond:
+        while ack_val < target:
+            left = end - time.time()
+            if left <= 0:
+                return False
+            ack_cond.wait(left)
+        return True
+
+
 def reader():
     global sock
     buf = b""
@@ -235,6 +267,11 @@ def reader():
             text = line.decode("ascii", "ignore").strip()
             if text.startswith("@"):
                 push(text)
+                if text.startswith("@A "):
+                    try:
+                        note_ack(int(text[3:].split("*")[0].strip()))
+                    except ValueError:
+                        pass
                 if text.startswith("@L "):
                     try:
                         idx, nm = text[3:].split("*")[0].split(" ", 1)
@@ -6469,23 +6506,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ok = False
             try:
                 spec = json.load(open(_os.path.join(root, name, "set.json")))
-                send_body("C 0")
-                for z in spec["zones"]:
-                    raw = open(_os.path.join(root, name, z["file"]), "rb").read()
-                    frames = len(raw) // 2
-                    send_body("C %d %d" % (frames, int(z["root"])))
-                    # 32 samples per frame: long lines were being truncated by the bridge,
-                    # which left the Pod with half a sample and every later one shifted
-                    import time as _time
-                    for i in range(0, len(raw), 64):
-                        blk = raw[i:i + 64]
-                        vals = [int.from_bytes(blk[j:j + 2], "little", signed=True)
-                                for j in range(0, len(blk) - 1, 2)]
-                        send_body("X " + "".join("%04X" % (v & 0xFFFF) for v in vals))
-                        if (i // 64) % 32 == 31:
-                            _time.sleep(0.004)   # let the Pod drink: it has no flow control
-                send_body("G")
-                open(_os.path.join(root, "current.txt"), "w").write(spec.get("name", name))
+                # the transfer runs in its own process, which takes the serial port for
+                # the duration: it stops the bridge, writes, verifies, starts the bridge
+                import subprocess as _sp
+                r = _sp.run(["python3", _os.path.expanduser("~/slib/loadset.py"), name],
+                            capture_output=True, text=True, timeout=300)
+                print(r.stdout + r.stderr, flush=True)
+                ok = (r.returncode == 0)
                 ok = True
             except Exception:
                 ok = False
