@@ -50,6 +50,26 @@ def main():
     zones = spec["zones"]
     total = sum(os.path.getsize(os.path.join(SLIB, name, z["file"])) // 2 for z in zones)
 
+    # the two pianos are baked into flash and far larger than the arena, so selecting them
+    # restores the flash copies instead of streaming anything
+    if name.startswith("piano"):
+        import serial
+        sh("sudo -n systemctl stop podbridge")
+        time.sleep(0.5)
+        ser = serial.Serial(PORT, 115200, timeout=0.2)
+        time.sleep(0.3)
+        ser.reset_input_buffer()
+        ser.write(frame("P 46 1"))
+        time.sleep(0.3)
+        ser.write(frame("P 45 0"))
+        time.sleep(0.3)
+        reply = read_want(ser, "@L 46")
+        ser.close()
+        sh("sudo -n systemctl start podbridge")
+        open(os.path.join(SLIB, "current.txt"), "w").write(spec.get("name", name))
+        print("restored %s (%s)" % (spec.get("name", name), "ok" if reply else "no reply"))
+        return 0
+
     sh("sudo -n systemctl stop podbridge")
     time.sleep(0.6)
     import serial
