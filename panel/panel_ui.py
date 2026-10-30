@@ -5301,88 +5301,154 @@ function buildKit(){
 }
 
 
-/* ---- sample editor: loop points for the streamed sets ---- */
+/* ---- sample editor: loop points, waveform and an auditioning kalimba ---- */
 let smplSet = "", smplA = 0.45, smplB = 0.92, smplPeaks = [];
+let smplCanvas = null, smplHot = null, smplPlay = 0, smplPlaying = false;
+
+function smplDraw(){
+  const cv = smplCanvas;
+  if(!cv) return;
+  const g = cv.getContext("2d");
+  const W = cv.width, H = cv.height, mid = H / 2;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = "#0b1218"; g.fillRect(0, 0, W, H);
+  /* zones: before the loop, the loop itself, after it */
+  const xa = smplA * W, xb = smplB * W;
+  g.fillStyle = "rgba(255,209,102,0.06)"; g.fillRect(xa, 0, xb - xa, H);
+  if(smplPeaks.length){
+    const w = W / smplPeaks.length;
+    for(let i = 0; i < smplPeaks.length; i++){
+      const x = i * w;
+      const inside = x >= xa && x <= xb;
+      const h = Math.max(1, (smplPeaks[i] / 32768) * (H * 0.44));
+      g.fillStyle = inside ? "#7fd1ff" : "#33586e";
+      g.fillRect(x, mid - h, Math.max(1, w - 0.4), h * 2);
+    }
+  }
+  /* play head */
+  if(smplPlaying){
+    const x = Math.max(0, Math.min(1, smplPlay)) * W;
+    g.fillStyle = "#8bffb0"; g.fillRect(x - 1, 0, 3, H);
+  }
+  /* handles with a fat grab area at the top */
+  const handle = (x, col, label)=>{
+    g.fillStyle = col;
+    g.fillRect(x - 1, 0, 2, H);
+    g.beginPath();
+    g.roundRect ? g.roundRect(x - 26, 0, 52, 34, 8) : g.rect(x - 26, 0, 52, 34);
+    g.fill();
+    g.fillStyle = "#08121a"; g.font = "700 18px ui-monospace,monospace"; g.textAlign = "center";
+    g.fillText(label, x, 24); g.textAlign = "start";
+  };
+  handle(xa, "#ffd166", "A");
+  handle(xb, "#7fd1ff", "B");
+}
+
+function smplSync(){
+  smplA = (+document.getElementById("smpla").value) / 1000;
+  smplB = (+document.getElementById("smplb").value) / 1000;
+  if(smplB <= smplA + 0.01) smplB = smplA + 0.01;
+  document.getElementById("smplval").textContent =
+    "A " + (smplA * 100).toFixed(1) + "%  B " + (smplB * 100).toFixed(1) + "%";
+  smplDraw();
+}
+
 function buildSmpl(){
   const v = document.getElementById("view");
   v.innerHTML = "";
   v.style.display = "block";
   const wrap = document.createElement("div");
-  wrap.style.cssText = "padding:10px 14px;color:#cfe3f2;font:13px ui-monospace,monospace";
+  wrap.style.cssText = "padding:8px 14px;color:#cfe3f2;font:13px ui-monospace,monospace";
   const head = document.createElement("div");
-  head.style.cssText = "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px";
+  head.style.cssText = "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px";
   head.innerHTML = '<b style="color:#7fd1ff">SAMPLE</b><span id="smplname">-</span>' +
     '<button id="smplapply" class="pbtn">APPLY</button><button id="smplsave" class="pbtn">SAVE</button>' +
     '<span id="smplstat" style="color:#7fd1ff"></span>';
   wrap.appendChild(head);
+
   const cv = document.createElement("canvas");
-  cv.width = 1700; cv.height = 320;
-  cv.style.cssText = "width:100%;height:320px;background:#0b1218;border:1px solid #22303c;border-radius:8px";
+  cv.width = 1700; cv.height = 300;
+  cv.style.cssText = "width:100%;height:300px;background:#0b1218;border:1px solid #22303c;border-radius:8px;touch-action:none";
   wrap.appendChild(cv);
+  smplCanvas = cv;
+
   const row = document.createElement("div");
-  row.style.cssText = "display:flex;gap:18px;margin-top:10px;align-items:center";
+  row.style.cssText = "display:flex;gap:18px;margin-top:8px;align-items:center";
   row.innerHTML =
-    '<label>LOOP A <input id="smpla" type="range" min="0" max="990" value="450" style="width:280px"></label>' +
-    '<label>LOOP B <input id="smplb" type="range" min="10" max="1000" value="920" style="width:280px"></label>' +
+    '<label>LOOP A <input id="smpla" type="range" min="0" max="990" value="' + Math.round(smplA * 1000) + '" style="width:280px"></label>' +
+    '<label>LOOP B <input id="smplb" type="range" min="10" max="1000" value="' + Math.round(smplB * 1000) + '" style="width:280px"></label>' +
     '<span id="smplval"></span>';
   wrap.appendChild(row);
+
+  const keys = document.createElement("div");
+  keys.id = "smplkeys";
+  keys.style.cssText = "margin-top:8px;height:calc(100vh - 520px);min-height:150px;display:flex;flex-direction:column;gap:6px";
+  wrap.appendChild(keys);
   v.appendChild(wrap);
 
-  const draw = ()=>{
-    const g = cv.getContext("2d");
-    g.clearRect(0, 0, cv.width, cv.height);
-    const mid = cv.height / 2;
-    g.strokeStyle = "#2b3b4a"; g.beginPath(); g.moveTo(0, mid); g.lineTo(cv.width, mid); g.stroke();
-    if(smplPeaks.length){
-      g.fillStyle = "#4fa3d1";
-      const w = cv.width / smplPeaks.length;
-      for(let i = 0; i < smplPeaks.length; i++){
-        const h = Math.max(1, (smplPeaks[i] / 32768) * (cv.height * 0.46));
-        g.fillRect(i * w, mid - h, Math.max(1, w - 0.5), h * 2);
-      }
-    }
-    const mark = (x, col, label)=>{
-      g.fillStyle = col; g.fillRect(x, 0, 2, cv.height);
-      g.font = "700 14px ui-monospace"; g.fillText(label, x + 4, 16);
-    };
-    mark(smplA * cv.width, "#ffd166", "A");
-    mark(smplB * cv.width, "#7fd1ff", "B");
+  const grab = (ev)=>{
+    const r = cv.getBoundingClientRect();
+    const x = (ev.clientX - r.left) / r.width;
+    if(Math.abs(x - smplA) < 0.03) return "A";
+    if(Math.abs(x - smplB) < 0.03) return "B";
+    return null;
   };
-  const sync = ()=>{
-    smplA = (+document.getElementById("smpla").value) / 1000;
-    smplB = (+document.getElementById("smplb").value) / 1000;
-    if(smplB <= smplA + 0.01) smplB = smplA + 0.01;
-    document.getElementById("smplval").textContent =
-      "A " + (smplA * 100).toFixed(1) + "%  B " + (smplB * 100).toFixed(1) + "%";
-    draw();
-  };
-  document.getElementById("smpla").oninput = sync;
-  document.getElementById("smplb").oninput = sync;
+  cv.addEventListener("pointerdown", ev=>{
+    smplHot = grab(ev);
+    if(smplHot) cv.setPointerCapture(ev.pointerId);
+  });
+  cv.addEventListener("pointermove", ev=>{
+    if(!smplHot) return;
+    const r = cv.getBoundingClientRect();
+    let x = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+    if(smplHot === "A"){ smplA = Math.min(x, smplB - 0.01); document.getElementById("smpla").value = smplA * 1000; }
+    else { smplB = Math.max(x, smplA + 0.01); document.getElementById("smplb").value = smplB * 1000; }
+    smplSync();
+  });
+  cv.addEventListener("pointerup", ()=>{ smplHot = null; });
+  cv.addEventListener("pointercancel", ()=>{ smplHot = null; });
+
+  document.getElementById("smpla").oninput = smplSync;
+  document.getElementById("smplb").oninput = smplSync;
   document.getElementById("smplapply").onclick = ()=>{
     send("P 47 " + Math.round(smplA * 1000));
     send("P 48 " + Math.round(smplB * 1000));
     document.getElementById("smplstat").textContent = "applied";
   };
-  /* a squashed kalimba under the waveform: hold a tine while you move the loop points */
-  const keys = document.createElement("div");
-  keys.id = "smplkeys";
-  keys.style.cssText = "margin-top:10px;height:calc(100vh - 520px);min-height:150px;display:flex;flex-direction:column;gap:6px";
-  v.appendChild(keys);
-  setTimeout(()=>{ try{ buildKalimba(keys); }catch(e){} }, 0);
   document.getElementById("smplsave").onclick = ()=>{
-    fetch("/loopsave?n=" + encodeURIComponent(smplSet || pianoSetName) +
+    fetch("/loopsave?n=" + encodeURIComponent(smplSet) +
           "&a=" + Math.round(smplA * 1000) + "&b=" + Math.round(smplB * 1000))
       .then(r=>r.text()).then(t=>{ document.getElementById("smplstat").textContent = t; }).catch(()=>{});
   };
-  /* the endpoint wants the folder name, which only the server knows for sure */
+
+  /* the play head runs while a tine is held, at the pitch of the sample */
+  const tick = ()=>{
+    if(smplPlaying){
+      const span = Math.max(0.02, smplB - smplA);
+      smplPlay += 0.0009 / span;
+      if(smplPlay >= smplB) smplPlay = smplA + 0.001;
+      smplDraw();
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  keys.addEventListener("pointerdown", ()=>{ smplPlaying = true; smplPlay = smplA; });
+  keys.addEventListener("pointerup", ()=>{ smplPlaying = false; smplDraw(); });
+  keys.addEventListener("pointercancel", ()=>{ smplPlaying = false; smplDraw(); });
+
+  setTimeout(()=>{ try{ buildKalimba(keys); }catch(e){} }, 0);
+
+  /* resolve the set that is actually loaded: name from the server, id from the list */
   fetch("/setname").then(r=>r.json()).then(nm=>{
-    const st = (window.__sets || []).find(x => (x.name || x.id) === nm);
-    const id = window.__setSel || (st ? st.id : nm);
-    smplSet = id;
-    document.getElementById("smplname").textContent = id;
-    return fetch("/wave?n=" + encodeURIComponent(id)).then(r=>r.json());
-  }).then(p=>{ smplPeaks = p || []; draw(); }).catch(()=>{});
-  sync();
+    return fetch("/sets").then(r=>r.json()).then(list=>{
+      const st = (list || []).find(x => (x.name || x.id) === nm) || (list || [])[0];
+      smplSet = st ? st.id : nm;
+      document.getElementById("smplname").textContent = st ? (st.name || st.id) : nm;
+      return fetch("/wave?n=" + encodeURIComponent(smplSet)).then(r=>r.json());
+    });
+  }).then(p=>{ smplPeaks = p || []; smplDraw(); }).catch(()=>{});
+
+  smplSync();
 }
 
 function renderView(){
