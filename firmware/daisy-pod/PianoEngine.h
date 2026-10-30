@@ -68,8 +68,8 @@ class PianoEngine
                                               : (arenaRoot >= 0 ? arenaRoot : kPiano[best].note);
         v.base = powf(2.0f, (note - bestRoot) / 12.0f) * powf(2.0f, (float)cents / 1200.0f);
         v.rate = v.base * v.bendMul;
-        v.loopA = (float)len_[best] * 0.45f;
-        v.loopB = (float)len_[best] * 0.92f;
+        v.loopA = (float)len_[best] * loopA_;
+        v.loopB = (float)len_[best] * loopB_;
         /* the tape samples sit around -9 dBFS: lift them into the same range as the synth
            engines so the sampler is not the quiet one in the room */
         v.amp  = (vel / 127.0f) * 2.4f;
@@ -186,7 +186,8 @@ public:
        rather than from the baked in table. */
     int arenaRoot = -1;
     int zoneRoot_[5] = {0, 0, 0, 0, 0};
-    bool loopOn_ = false;   /* off by default so the pianos keep their natural decay */   /* sustained instruments loop the body of the sample */
+    bool loopOn_ = false;   /* off by default so the pianos keep their natural decay */
+    float loopA_ = 0.45f, loopB_ = 0.92f;   /* loop window as a fraction of the sample */   /* sustained instruments loop the body of the sample */
     int zoneCount_ = 0;
     void UseArena(int frames, int root)
     {
@@ -201,6 +202,24 @@ public:
        it was recorded at. Up to five, which is what the root slots already allowed. */
     void ResetZones() { zoneCount_ = 0; arenaRoot = -1; }
     void SetLoop(bool b) { loopOn_ = b; }
+
+    /* the window can be moved while a note is held, which is what the editor tab drives */
+    void SetLoopWindow(float a, float b)
+    {
+        if(a < 0.0f) a = 0.0f;
+        if(b > 0.999f) b = 0.999f;
+        if(b - a < 0.01f) b = a + 0.01f;
+        loopA_ = a;
+        loopB_ = b;
+        for(int i = 0; i < kVoices; i++)
+        {
+            V &v = v_[i];
+            v.loopA = (float)len_[v.slot] * loopA_;
+            v.loopB = (float)len_[v.slot] * loopB_;
+        }
+    }
+    float loopA() const { return loopA_; }
+    float loopB() const { return loopB_; }
     /* put the samples that live in flash back into the buffer: loading a set overwrites it,
        and without this the pianos would keep playing whatever the arena last held */
     void LoadBaked()

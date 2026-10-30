@@ -97,6 +97,10 @@ def main():
     time.sleep(0.1)
     # sustained material loops the sample body; pianos keep their natural decay
     ser.write(frame("P 45 " + ("1" if name.startswith("tron") else "0")))
+    lo = int(spec.get("loopA", 0.45) * 1000)
+    hi = int(spec.get("loopB", 0.92) * 1000)
+    ser.write(frame("P 47 %d" % lo))
+    ser.write(frame("P 48 %d" % hi))
     reply = read_want(ser, "@J ")
     count = -1
     if reply:

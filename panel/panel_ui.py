@@ -836,6 +836,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; h
       <button data-v="clips">CLIPS</button>
       <button data-v="song">SONG</button>
       <button data-v="kit">KIT</button>
+      <button data-v="smpl">SMPL</button>
       <span id="hint">pads: y = velocity, drag = filter</span>
     </div>
     <div id="view"></div>
@@ -5299,6 +5300,84 @@ function buildKit(){
 }
 
 
+/* ---- sample editor: loop points for the streamed sets ---- */
+let smplSet = "", smplA = 0.45, smplB = 0.92, smplPeaks = [];
+function buildSmpl(){
+  const v = document.getElementById("view");
+  v.innerHTML = "";
+  v.style.display = "block";
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "padding:10px 14px;color:#cfe3f2;font:13px ui-monospace,monospace";
+  const head = document.createElement("div");
+  head.style.cssText = "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px";
+  head.innerHTML = '<b style="color:#7fd1ff">SAMPLE</b><span id="smplname">-</span>' +
+    '<button id="smplapply" class="pbtn">APPLY</button><button id="smplsave" class="pbtn">SAVE</button>' +
+    '<span id="smplstat" style="color:#7fd1ff"></span>';
+  wrap.appendChild(head);
+  const cv = document.createElement("canvas");
+  cv.width = 1700; cv.height = 320;
+  cv.style.cssText = "width:100%;height:320px;background:#0b1218;border:1px solid #22303c;border-radius:8px";
+  wrap.appendChild(cv);
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:18px;margin-top:10px;align-items:center";
+  row.innerHTML =
+    '<label>LOOP A <input id="smpla" type="range" min="0" max="990" value="450" style="width:280px"></label>' +
+    '<label>LOOP B <input id="smplb" type="range" min="10" max="1000" value="920" style="width:280px"></label>' +
+    '<span id="smplval"></span>';
+  wrap.appendChild(row);
+  v.appendChild(wrap);
+
+  const draw = ()=>{
+    const g = cv.getContext("2d");
+    g.clearRect(0, 0, cv.width, cv.height);
+    const mid = cv.height / 2;
+    g.strokeStyle = "#2b3b4a"; g.beginPath(); g.moveTo(0, mid); g.lineTo(cv.width, mid); g.stroke();
+    if(smplPeaks.length){
+      g.fillStyle = "#4fa3d1";
+      const w = cv.width / smplPeaks.length;
+      for(let i = 0; i < smplPeaks.length; i++){
+        const h = Math.max(1, (smplPeaks[i] / 32768) * (cv.height * 0.46));
+        g.fillRect(i * w, mid - h, Math.max(1, w - 0.5), h * 2);
+      }
+    }
+    const mark = (x, col, label)=>{
+      g.fillStyle = col; g.fillRect(x, 0, 2, cv.height);
+      g.font = "700 14px ui-monospace"; g.fillText(label, x + 4, 16);
+    };
+    mark(smplA * cv.width, "#ffd166", "A");
+    mark(smplB * cv.width, "#7fd1ff", "B");
+  };
+  const sync = ()=>{
+    smplA = (+document.getElementById("smpla").value) / 1000;
+    smplB = (+document.getElementById("smplb").value) / 1000;
+    if(smplB <= smplA + 0.01) smplB = smplA + 0.01;
+    document.getElementById("smplval").textContent =
+      "A " + (smplA * 100).toFixed(1) + "%  B " + (smplB * 100).toFixed(1) + "%";
+    draw();
+  };
+  document.getElementById("smpla").oninput = sync;
+  document.getElementById("smplb").oninput = sync;
+  document.getElementById("smplapply").onclick = ()=>{
+    send("P 47 " + Math.round(smplA * 1000));
+    send("P 48 " + Math.round(smplB * 1000));
+    document.getElementById("smplstat").textContent = "applied";
+  };
+  document.getElementById("smplsave").onclick = ()=>{
+    fetch("/loopsave?n=" + encodeURIComponent(smplSet || pianoSetName) +
+          "&a=" + Math.round(smplA * 1000) + "&b=" + Math.round(smplB * 1000))
+      .then(r=>r.text()).then(t=>{ document.getElementById("smplstat").textContent = t; }).catch(()=>{});
+  };
+  /* the endpoint wants the folder name, which only the server knows for sure */
+  fetch("/setname").then(r=>r.json()).then(nm=>{
+    const st = (window.__sets || []).find(x => (x.name || x.id) === nm);
+    const id = window.__setSel || (st ? st.id : nm);
+    smplSet = id;
+    document.getElementById("smplname").textContent = id;
+    return fetch("/wave?n=" + encodeURIComponent(id)).then(r=>r.json());
+  }).then(p=>{ smplPeaks = p || []; draw(); }).catch(()=>{});
+  sync();
+}
+
 function renderView(){
   const bad = document.getElementById("bendread"); if(bad) bad.remove();
   if(typeof gArpStop === "function") gArpStop();   /* leaving the grid drops the latch */
@@ -5314,6 +5393,7 @@ function renderView(){
   else if(view==="euclid") buildEuclid();
   else if(view==="xy") buildXY();
   else if(view==="alg") buildAlg();
+  else if(view==="smpl") buildSmpl();
   else if(view==="ops") buildOps();
   else if(view==="rand") buildRand();
   else if(view==="clips") buildClips();
@@ -6511,6 +6591,64 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except OSError:
                 pass
             body = txt.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/wave":
+            import os as _os
+            name = _os.path.basename((query.get("n") or [""])[0])
+            root = _os.path.expanduser("~/slib")
+            peaks = []
+            try:
+                # accept either the folder name or the display name from set.json
+                if not _os.path.exists(_os.path.join(root, name, "set.json")):
+                    for d in _os.listdir(root):
+                        f = _os.path.join(root, d, "set.json")
+                        if _os.path.exists(f):
+                            try:
+                                if json.load(open(f)).get("name") == name:
+                                    name = d
+                                    break
+                            except Exception:
+                                pass
+                spec = json.load(open(_os.path.join(root, name, "set.json")))
+                f = _os.path.join(root, name, spec["zones"][0]["file"])
+                raw = open(f, "rb").read()
+                n = len(raw) // 2
+                buckets = 400
+                step = max(1, n // buckets)
+                for b in range(buckets):
+                    hi = 0
+                    for i in range(b * step, min(n, (b + 1) * step), 7):
+                        v = int.from_bytes(raw[i * 2:i * 2 + 2], "little", signed=True)
+                        if v < 0: v = -v
+                        if v > hi: hi = v
+                    peaks.append(hi)
+            except Exception:
+                peaks = []
+            body = json.dumps(peaks).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/loopsave":
+            import os as _os
+            name = _os.path.basename((query.get("n") or [""])[0])
+            a = int((query.get("a") or ["450"])[0])
+            b = int((query.get("b") or ["920"])[0])
+            ok = "saved"
+            try:
+                f = _os.path.join(_os.path.expanduser("~/slib"), name, "set.json")
+                spec = json.load(open(f))
+                spec["loopA"] = a / 1000.0
+                spec["loopB"] = b / 1000.0
+                json.dump(spec, open(f, "w"), indent=1)
+            except Exception as e:
+                ok = "failed"
+            body = ok.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.send_header("Content-Length", str(len(body)))

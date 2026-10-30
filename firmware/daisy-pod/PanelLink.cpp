@@ -853,6 +853,14 @@ static void handle(const char* body)
                 else if(a == 37) { piano_on = (b != 0); if(!piano_on) piano.KillAll(); }
                 else if(a == 44) { p_sustain = (b != 0); if(!p_sustain) piano.Release(-1); }
                 else if(a == 45) { piano.SetLoop(b != 0); char m[24]; snprintf(m, sizeof(m), "L 45 %d", b != 0); send_body(m); }
+                else if(a == 46) { piano.LoadBaked(); send_body("L 46 1"); }
+                else if(a == 47) { piano.SetLoopWindow(b / 1000.0f, piano.loopB()); }
+                else if(a == 48) { piano.SetLoopWindow(piano.loopA(), b / 1000.0f); }
+                else if(a == 49)
+                {
+                    char m[32]; snprintf(m, sizeof(m), "L 49 %d %d", (int)(piano.loopA() * 1000), (int)(piano.loopB() * 1000));
+                    send_body(m);
+                }
                 else apply_param(a, b);
             }
             break;
