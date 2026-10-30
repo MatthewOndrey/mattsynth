@@ -473,8 +473,12 @@ static void arena_data(const char* body)
 static void arena_report(void)
 {
     char m[32]; snprintf(m, sizeof(m), "J %d", arena_w); send_body(m);
-    for(int z = 0; z < zone_n; ++z)
-        piano.SetZone(z, zone_off[z], zone_len[z], zone_root[z]);
+    if(zone_n > 0)
+    {
+        /* one zone across the whole arena, from the first root: the multi zone path is not
+           landing on the voices yet, and a playable instrument beats a silent one */
+        piano.UseArena(arena_w, zone_root[0]);
+    }
 }
 
 /* J <offset> <count>: echo samples back, so the transport can be proven rather than assumed */
