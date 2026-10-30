@@ -5321,39 +5321,26 @@ function smplDraw(){
   g.fillStyle = "rgba(255,209,102,0.06)"; g.fillRect(xa, 0, xb - xa, H);
   if(smplPeaks.length){
     const w = W / smplPeaks.length;
-    const hOf = i => Math.max(1, (smplPeaks[i] / 32768) * (H * 0.44));
-    if(smplStyle === 0){
-      for(let i = 0; i < smplPeaks.length; i++){
-        const x = i * w, inside = x >= xa && x <= xb, h = hOf(i);
-        g.fillStyle = inside ? "#7fd1ff" : "#33586e";
-        g.fillRect(x, mid - h, Math.max(1, w - 0.4), h * 2);
-      }
-    } else if(smplStyle === 1){
-      /* filled envelope: smoother, reads like a tape machine's meter */
-      const grd = g.createLinearGradient(0, 0, 0, H);
-      grd.addColorStop(0, "rgba(127,209,255,0.95)");
-      grd.addColorStop(0.5, "rgba(60,130,180,0.55)");
-      grd.addColorStop(1, "rgba(127,209,255,0.95)");
-      g.fillStyle = grd;
-      g.beginPath(); g.moveTo(0, mid);
-      for(let i = 0; i < smplPeaks.length; i++) g.lineTo(i * w, mid - hOf(i));
-      for(let i = smplPeaks.length - 1; i >= 0; i--) g.lineTo(i * w, mid + hOf(i));
-      g.closePath(); g.fill();
-      g.fillStyle = "rgba(255,209,102,0.10)"; g.fillRect(xa, 0, xb - xa, H);
-    } else {
-      /* outline: just the peaks, quiet and clean */
-      g.strokeStyle = "#7fd1ff"; g.lineWidth = 2; g.beginPath();
-      for(let i = 0; i < smplPeaks.length; i++){
-        const x = i * w, h = hOf(i);
-        i ? g.lineTo(x, mid - h) : g.moveTo(x, mid - h);
-      }
+    const pair = i => Array.isArray(smplPeaks[i]) ? smplPeaks[i] : [-smplPeaks[i], smplPeaks[i]];
+    const yOf = v => mid - (v / 32768) * (H * 0.46);
+    if(smplStyle === 2){
+      /* outline: the true top and bottom of the signal, two thin lines */
+      g.strokeStyle = "#7fd1ff"; g.lineWidth = 1.5;
+      g.beginPath();
+      for(let i = 0; i < smplPeaks.length; i++){ const [lo, hi] = pair(i); i ? g.lineTo(i * w, yOf(hi)) : g.moveTo(i * w, yOf(hi)); }
       g.stroke();
       g.strokeStyle = "#4b7d99"; g.beginPath();
-      for(let i = 0; i < smplPeaks.length; i++){
-        const x = i * w, h = hOf(i);
-        i ? g.lineTo(x, mid + h) : g.moveTo(x, mid + h);
-      }
+      for(let i = 0; i < smplPeaks.length; i++){ const [lo, hi] = pair(i); i ? g.lineTo(i * w, yOf(lo)) : g.moveTo(i * w, yOf(lo)); }
       g.stroke();
+    } else {
+      /* filled: the real min to max of every column, which is what a DAW draws */
+      g.fillStyle = smplStyle === 1 ? "rgba(127,209,255,0.85)" : "#5fb6e0";
+      for(let i = 0; i < smplPeaks.length; i++){
+        const [lo, hi] = pair(i);
+        const top = yOf(hi), bot = yOf(lo);
+        g.fillRect(i * w, top, Math.max(1, w - 0.3), Math.max(1, bot - top));
+      }
+      g.fillStyle = "rgba(255,209,102,0.10)"; g.fillRect(xa, 0, xb - xa, H);
     }
   }
   /* play head */
@@ -5513,7 +5500,16 @@ function buildSmpl(){
       return fetch("/wave?n=" + encodeURIComponent(smplSet)).then(r=>r.json());
     });
   }).then(p=>{
-    if(p && p.peaks){ smplPeaks = p.peaks; smplFrames = p.frames || 115200; smplRoot = p.root != null ? p.root : 60; }
+    if(p && p.peaks){
+      smplPeaks = p.peaks;
+      smplFrames = p.frames || 115200;
+      smplRoot = p.root != null ? p.root : 60;
+      /* what was saved for this set wins over the defaults */
+      if(p.loopA != null) smplA = p.loopA;
+      if(p.loopB != null) smplB = p.loopB;
+      document.getElementById("smpla").value = Math.round(smplA * 1000);
+      document.getElementById("smplb").value = Math.round(smplB * 1000);
+    }
     else { smplPeaks = p || []; }
     smplDraw();
   }).catch(()=>{});
@@ -6760,22 +6756,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f = _os.path.join(root, name, spec["zones"][0]["file"])
                 raw = open(f, "rb").read()
                 n = len(raw) // 2
-                buckets = 400
+                buckets = 900
                 step = max(1, n // buckets)
                 for b in range(buckets):
+                    lo = 0
                     hi = 0
-                    for i in range(b * step, min(n, (b + 1) * step), 7):
+                    for i in range(b * step, min(n, (b + 1) * step), 3):
                         v = int.from_bytes(raw[i * 2:i * 2 + 2], "little", signed=True)
-                        if v < 0: v = -v
+                        if v < lo: lo = v
                         if v > hi: hi = v
-                    peaks.append(hi)
+                    peaks.append([lo, hi])
             except Exception:
                 peaks = []
-            info = {"peaks": peaks, "frames": 0, "root": 60}
+            info = {"peaks": peaks, "frames": 0, "root": 60, "loopA": None, "loopB": None}
             try:
                 info["frames"] = os.path.getsize(
                     os.path.join(_os.path.expanduser("~/slib"), name, spec["zones"][0]["file"])) // 2
                 info["root"] = int(spec["zones"][0]["root"])
+                info["loopA"] = spec.get("loopA")
+                info["loopB"] = spec.get("loopB")
             except Exception:
                 pass
             body = json.dumps(info).encode()
