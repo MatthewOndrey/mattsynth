@@ -67,7 +67,9 @@ class PianoEngine
         v.rate = v.base * v.bendMul;
         v.loopA = (float)len_[best] * 0.45f;
         v.loopB = (float)len_[best] * 0.92f;
-        v.amp  = (vel / 127.0f) * 0.85f;
+        /* the tape samples sit around -9 dBFS: lift them into the same range as the synth
+           engines so the sampler is not the quiet one in the room */
+        v.amp  = (vel / 127.0f) * 2.4f;
     }
 
     int Active() const
@@ -136,7 +138,9 @@ class PianoEngine
                 if(p + 1 >= len) { v.on = false; break; }
                 const float fr = v.pos - (float)p;
                 const float a  = src[p] * (1.0f - fr) + src[p + 1] * fr;
-                const float s  = (a / 32768.0f) * v.amp;
+                float s = (a / 32768.0f) * v.amp;
+                if(s >  1.0f) s =  1.0f;            /* soft ceiling, no hard clip on sums */
+                if(s < -1.0f) s = -1.0f;
                 l[i] += s;
                 r[i] += s;
                 v.pos += v.rate;
@@ -161,7 +165,7 @@ public:
        rather than from the baked in table. */
     int arenaRoot = -1;
     int zoneRoot_[5] = {0, 0, 0, 0, 0};
-    bool loopOn_ = true;    /* sustained by default: the loader turns it off for pianos */   /* sustained instruments loop the body of the sample */
+    bool loopOn_ = false;   /* off by default so the pianos keep their natural decay */   /* sustained instruments loop the body of the sample */
     int zoneCount_ = 0;
     void UseArena(int frames, int root)
     {
@@ -176,6 +180,10 @@ public:
        it was recorded at. Up to five, which is what the root slots already allowed. */
     void ResetZones() { zoneCount_ = 0; arenaRoot = -1; }
     void SetLoop(bool b) { loopOn_ = b; }
+    int zoneCount() const { return zoneCount_; }
+    int zoneLen(int z) const { return (z >= 0 && z < 5) ? (int)len_[z] : -1; }
+    int zoneOff(int z) const { return (z >= 0 && z < 5) ? (int)off_[z] : -1; }
+    int zoneRoot(int z) const { return (z >= 0 && z < 5) ? zoneRoot_[z] : -1; }
     void SetZone(int z, int off, int len, int root)
     {
         if(z < 0 || z > 4) return;

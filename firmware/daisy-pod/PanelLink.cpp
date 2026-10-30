@@ -472,7 +472,11 @@ static void arena_data(const char* body)
 
 static void arena_report(void)
 {
-    char m[32]; snprintf(m, sizeof(m), "J %d", arena_w); send_body(m);
+    char m[96];
+    snprintf(m, sizeof(m), "J %d z%d len%d off%d root%d l0 %d",
+             arena_w, piano.zoneCount(), piano.zoneLen(0), piano.zoneOff(0),
+             piano.zoneRoot(0), piano.zoneLen(1));
+    send_body(m);
     if(zone_n > 0)
     {
         /* one zone across the whole arena, from the first root: the multi zone path is not
